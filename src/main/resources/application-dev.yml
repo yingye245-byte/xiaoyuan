@@ -55,14 +55,19 @@ spring:
 
 mybatis-plus:
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 注意：不要用 StdOutImpl。它会绕过日志框架直接 println 到标准输出，
+    # 且每查询一次就逐行打印结果集，在文件重定向场景下会把请求线程拖慢到秒级。
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
 app:
   mail:
     mock: true
 
+# 开发环境默认不开启 SQL 打印；需要看 SQL 时把 mapper 包级别临时调成 debug
+# （日志走 logback，可被 logback-spring.xml 的滚动策略管理）。
 logging:
   level:
     root: info
-    com.campus.secondhand: debug
+    com.campus.secondhand: info
+    com.campus.secondhand.mapper: info
     org.springframework.security: warn
