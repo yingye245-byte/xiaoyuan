@@ -17,7 +17,7 @@ public class NotifyConsumer {
 
     private final MessageService messageService;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_NOTIFY)
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_NOTIFY, autoStartup = "${mq.consumer.enabled:true}")
     public void onMessage(NotifyMessage message) {
         log.info("收到站内消息推送：userId={} title={}", message.getUserId(), message.getTitle());
         messageService.save(message);

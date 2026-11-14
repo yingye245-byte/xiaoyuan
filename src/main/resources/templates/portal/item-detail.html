@@ -112,8 +112,8 @@
                     该物品当前状态为「<span th:text="${item.statusText}">状态</span>」，暂不可购买
                 </div>
 
-                <!-- 收藏 -->
-                <div class="mt-16" th:if="${currentUserId != null}">
+                <!-- 收藏：自己的物品不允许收藏（后端会拒绝），所以直接不渲染按钮 -->
+                <div class="mt-16" th:if="${currentUserId != null and currentUserId != item.sellerId}">
                     <form th:action="@{'/favorite/' + ${item.id}}" method="post">
                         <button class="btn btn-block" type="submit"
                                 th:text="${item.favorited} ? '♥ 已收藏（点击取消）' : '♡ 收藏该物品'">

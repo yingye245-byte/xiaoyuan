@@ -96,10 +96,11 @@ public class CartService {
     }
 
     /**
-     * 购物车合计金额
+     * 购物车合计金额：只统计仍在售的物品，下架/交易中/已售出的不应计入（页面也不让结算）
      */
     public BigDecimal totalAmount(Long userId) {
         return list(userId).stream()
+                .filter(item -> item.getStatus() != null && item.getStatus() == Constants.ITEM_ON_SALE)
                 .map(Item::getPrice)
                 .filter(java.util.Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

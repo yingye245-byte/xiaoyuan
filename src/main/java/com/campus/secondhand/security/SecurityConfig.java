@@ -25,6 +25,13 @@ public class SecurityConfig {
 
     private final LoginSuccessHandler loginSuccessHandler;
 
+    /**
+     * remember-me 的签名密钥：默认值仅供本地开发，生产用 REMEMBER_ME_KEY 环境变量覆盖。
+     * 注意它必须固定，否则服务重启后所有「记住我」令牌全部失效。
+     */
+    @org.springframework.beans.factory.annotation.Value("${app.security.remember-me-key:campus-secondhand-remember-key}")
+    private String rememberMeKey;
+
     public SecurityConfig(LoginSuccessHandler loginSuccessHandler) {
         this.loginSuccessHandler = loginSuccessHandler;
     }
@@ -90,7 +97,7 @@ public class SecurityConfig {
                 .rememberMe()
                 .rememberMeParameter("remember-me")
                 .tokenValiditySeconds(7 * 24 * 3600)
-                .key("campus-secondhand-remember-key")
+                .key(rememberMeKey)
                 .and()
                 .headers()
                 .frameOptions().sameOrigin();

@@ -150,10 +150,32 @@ public class CategoryService {
         if (category.getId().equals(category.getParentId())) {
             throw new BusinessException("分类不能将自己设为父级");
         }
+        // 不能挂到自己的子孙下面，否则分类树出现环，前台分类导航整块消失且后台也修不回来
+        Long parentId = category.getParentId() == null ? 0L : category.getParentId();
+        if (parentId != 0L && isDescendant(category.getId(), parentId)) {
+            throw new BusinessException("不能把分类移动到它自己的子分类下面");
+        }
+        category.setParentId(parentId);
         checkNameDuplicate(category);
         categoryMapper.updateById(category);
         log.info("分类更新：{} -> {}", exist.getName(), category.getName());
         evictCache();
+    }
+
+    /**
+     * 判断 candidate 是否是 ancestor 的子孙节点（沿 parent_id 一路向上找）
+     */
+    private boolean isDescendant(Long ancestorId, Long candidateId) {
+        Long current = candidateId;
+        int guard = 0;
+        while (current != null && current != 0L && guard++ < 20) {
+            if (current.equals(ancestorId)) {
+                return true;
+            }
+            Category node = categoryMapper.selectById(current);
+            current = node == null ? 0L : node.getParentId();
+        }
+        return false;
     }
 
     /**

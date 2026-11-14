@@ -18,12 +18,17 @@ import com.campus.secondhand.mq.OrderDelayMessage;
 import com.campus.secondhand.utils.RedisKeys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -45,12 +50,23 @@ public class OrderService {
 
     private static final DateTimeFormatter ORDER_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
+    /**
+     * 释放分布式锁：只在「锁里的值还是自己」时才删除，避免删掉别人重新抢到的锁。
+     * 必须用 StringRedisTemplate（加锁时也是它），否则 JSON 序列化会写入带引号的值，比较必然失败。
+     */
+    private static final RedisScript<Long> RELEASE_LOCK_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class);
+
     private final OrdersMapper ordersMapper;
     private final ItemMapper itemMapper;
     private final UserService userService;
     private final ItemService itemService;
     private final MqProducer mqProducer;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate stringRedisTemplate;
+    /** 自身代理：scanTimeoutOrders 内部调用 autoCancel 必须走代理，否则 @Transactional 失效 */
+    private final ObjectProvider<OrderService> selfProvider;
 
     /**
      * 创建订单：幂等令牌 + Redis 分布式锁 + 状态 CAS，三步缺一不可
@@ -69,7 +85,7 @@ public class OrderService {
             throw new BusinessException("订单正在提交中，请勿重复点击");
         }
         String lockKey = RedisKeys.itemLock(itemId);
-        Boolean locked = redisTemplate.opsForValue()
+        Boolean locked = stringRedisTemplate.opsForValue()
                 .setIfAbsent(lockKey, String.valueOf(buyerId), 10, TimeUnit.SECONDS);
         if (!Boolean.TRUE.equals(locked)) {
             throw new BusinessException("该物品正在被其他同学下单，请稍后再试");
@@ -105,7 +121,8 @@ public class OrderService {
             log.info("订单创建成功：orderNo={} item={} buyer={}", order.getOrderNo(), itemId, buyerId);
             return order.getId();
         } finally {
-            redisTemplate.delete(lockKey);
+            stringRedisTemplate.execute(RELEASE_LOCK_SCRIPT, Collections.singletonList(lockKey),
+                    String.valueOf(buyerId));
         }
     }
 
@@ -123,10 +140,14 @@ public class OrderService {
         if (rows == 0) {
             throw new BusinessException("订单状态已变化，请刷新后重试");
         }
-        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+        int itemRows = itemMapper.update(null, new LambdaUpdateWrapper<Item>()
                 .eq(Item::getId, order.getItemId())
                 .eq(Item::getStatus, Constants.ITEM_LOCKED)
                 .set(Item::getStatus, Constants.ITEM_SOLD));
+        if (itemRows == 0) {
+            // 物品不在「交易中」，说明状态被并发改动（例如管理员已下架），整笔支付一起回滚
+            throw new BusinessException("物品状态异常，支付失败，请联系卖家或管理员");
+        }
         itemService.evictItemCache(order.getItemId());
         Item item = itemMapper.selectById(order.getItemId());
         notifyParties(order, item, "买家已付款",
@@ -212,7 +233,8 @@ public class OrderService {
                 .last("LIMIT 50"));
         int count = 0;
         for (Orders order : list) {
-            if (autoCancel(order.getId())) {
+            // 必须通过代理调用，否则事务注解不生效：订单已取消而释放物品失败时无法回滚
+            if (selfProvider.getObject().autoCancel(order.getId())) {
                 count++;
             }
         }

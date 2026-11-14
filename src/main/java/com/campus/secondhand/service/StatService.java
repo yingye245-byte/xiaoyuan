@@ -87,10 +87,17 @@ public class StatService {
     }
 
     /**
-     * 生成当日统计快照（Spring Task 每日调用，也可手动触发）
+     * 生成统计快照。默认统计「昨天」：定时任务在 00:05 触发，
+     * 若统计当天只会覆盖刚过去的 5 分钟，前一天 24 小时的数据永远进不了表。
      */
     public DailyStat recordDailyStat() {
-        LocalDate today = LocalDate.now();
+        return recordDailyStat(LocalDate.now().minusDays(1));
+    }
+
+    /**
+     * 指定日期生成统计快照（手动补数或初始化历史数据时可用）
+     */
+    public DailyStat recordDailyStat(LocalDate today) {
         LocalDateTime start = today.atStartOfDay();
         LocalDateTime end = start.plusDays(1);
 

@@ -61,6 +61,7 @@
                             <td>
                                 <form class="inline-form" th:action="@{/admin/categories/update}" method="post">
                                     <input type="hidden" name="id" th:value="${top.id}"/>
+                                    <input type="hidden" name="parentId" th:value="${top.parentId}"/>
                                     <input class="input" type="text" name="name" th:value="${top.name}" required/>
                                     <input class="input" type="number" name="sort" th:value="${top.sort}" style="width:70px"/>
                                     <button class="btn btn-sm" type="submit">保存</button>
@@ -91,6 +92,7 @@
                             <td>
                                 <form class="inline-form" th:action="@{/admin/categories/update}" method="post">
                                     <input type="hidden" name="id" th:value="${sub.id}"/>
+                                    <input type="hidden" name="parentId" th:value="${sub.parentId}"/>
                                     <input class="input" type="text" name="name" th:value="${sub.name}" required/>
                                     <input class="input" type="number" name="sort" th:value="${sub.sort}" style="width:70px"/>
                                     <button class="btn btn-sm" type="submit">保存</button>

@@ -13,10 +13,13 @@ import java.util.Map;
 public interface StatMapper {
 
     /**
-     * 各分类在售物品数量分布（饼图）
+     * 各一级分类在售物品数量分布（饼图）。
+     * 二级分类的物品要计入它的一级分类，所以用「自身或其父级」匹配，并限定在售状态，与首页口径保持一致。
      */
     @Select("SELECT c.name AS name, COUNT(i.id) AS cnt FROM tb_category c " +
-            "LEFT JOIN tb_item i ON i.category_id = c.id AND i.deleted = 0 " +
+            "LEFT JOIN tb_item i ON i.deleted = 0 AND i.status = 1 " +
+            "AND (i.category_id = c.id OR i.category_id IN " +
+            "     (SELECT sub.id FROM tb_category sub WHERE sub.parent_id = c.id)) " +
             "WHERE c.parent_id = 0 GROUP BY c.id, c.name ORDER BY cnt DESC")
     List<Map<String, Object>> selectCategoryDistribution();
 

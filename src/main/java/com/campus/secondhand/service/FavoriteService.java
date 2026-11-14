@@ -10,6 +10,7 @@ import com.campus.secondhand.mapper.ItemMapper;
 import com.campus.secondhand.utils.RedisKeys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,13 +56,21 @@ public class FavoriteService {
             Favorite favorite = new Favorite();
             favorite.setUserId(userId);
             favorite.setItemId(itemId);
-            favoriteMapper.insert(favorite);
+            try {
+                favoriteMapper.insert(favorite);
+            } catch (DuplicateKeyException e) {
+                // 并发双击：唯一索引 uk_user_item 挡住了第二条，按「已收藏」处理，不要抛 500
+                log.info("用户 {} 重复收藏物品 {}，已忽略", userId, itemId);
+                return true;
+            }
             itemMapper.update(null, new LambdaUpdateWrapper<Item>()
                     .eq(Item::getId, itemId)
                     .setSql("favorite_count = favorite_count + 1"));
             favorited = true;
         }
         redisTemplate.delete(RedisKeys.itemDetail(itemId));
+        // 首页热门卡片也带收藏数，一起失效
+        redisTemplate.delete(RedisKeys.ITEM_HOT);
         log.info("用户 {} {} 收藏物品 {}", userId, favorited ? "添加" : "取消", itemId);
         return favorited;
     }

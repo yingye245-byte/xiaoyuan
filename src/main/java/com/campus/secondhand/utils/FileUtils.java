@@ -51,9 +51,10 @@ public class FileUtils {
         if (!allowed.contains(ext)) {
             throw new BusinessException("仅支持 " + fileProperties.getAllowedExt() + " 格式的图片");
         }
-        long maxBytes = fileProperties.getMaxSize() * 1024L * 1024L;
+        // file.max-size 配的就是字节数（5242880 = 5MB），不要再乘 1024*1024，否则阈值变成 5TB
+        long maxBytes = fileProperties.getMaxSize() == null ? 5L * 1024 * 1024 : fileProperties.getMaxSize();
         if (file.getSize() > maxBytes) {
-            throw new BusinessException("单张图片不能超过 " + fileProperties.getMaxSize() + "MB");
+            throw new BusinessException("单张图片不能超过 " + (maxBytes / 1024 / 1024) + "MB");
         }
         String relativeDir = subDir + "/" + LocalDate.now().format(DAY_FORMAT);
         Path dir = Paths.get(fileProperties.normalizedPath(), relativeDir);

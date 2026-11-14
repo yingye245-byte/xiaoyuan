@@ -17,7 +17,7 @@ public class OrderCancelConsumer {
 
     private final OrderService orderService;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_ORDER_CANCEL)
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_ORDER_CANCEL, autoStartup = "${mq.consumer.enabled:true}")
     public void onMessage(OrderDelayMessage message) {
         log.info("收到订单超时消息：orderId={}", message.getOrderId());
         boolean canceled = orderService.autoCancel(message.getOrderId());

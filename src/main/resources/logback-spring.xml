@@ -5,6 +5,8 @@
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n"/>
     <property name="CONSOLE_PATTERN"
               value="%d{HH:mm:ss.SSS} %highlight(%-5level) %cyan(%logger{36}) - %msg%n"/>
+    <!-- 日志目录：默认 logs/，生产用环境变量 LOG_PATH（部署脚本里是 /data/campus-secondhand/logs）覆盖 -->
+    <springProperty scope="context" name="LOG_PATH" source="logging.file.path" defaultValue="logs"/>
 
     <!-- 控制台：开发期主要看这里 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -16,9 +18,9 @@
 
     <!-- 按天切割文件日志 -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/campus-secondhand.log</file>
+        <file>${LOG_PATH}/campus-secondhand.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/campus-secondhand.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/campus-secondhand.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>2GB</totalSizeCap>
@@ -31,9 +33,9 @@
 
     <!-- 业务日志单独一份，便于排查 -->
     <appender name="BIZ" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/campus-biz.log</file>
+        <file>${LOG_PATH}/campus-biz.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>logs/campus-biz.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/campus-biz.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
@@ -44,11 +46,20 @@
         </encoder>
     </appender>
 
-    <logger name="com.campus.secondhand" level="debug" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="BIZ"/>
-        <appender-ref ref="FILE"/>
-    </logger>
+    <springProfile name="prod">
+        <logger name="com.campus.secondhand" level="info" additivity="false">
+            <appender-ref ref="BIZ"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+    </springProfile>
+
+    <springProfile name="!prod">
+        <logger name="com.campus.secondhand" level="debug" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="BIZ"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+    </springProfile>
 
     <springProfile name="prod">
         <root level="warn">

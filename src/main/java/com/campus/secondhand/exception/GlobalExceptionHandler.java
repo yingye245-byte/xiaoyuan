@@ -7,10 +7,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.ModelAndView;
 
@@ -34,8 +37,9 @@ public class GlobalExceptionHandler {
         if (isAjax(request)) {
             return R.fail(e.getCode(), e.getMessage());
         }
-        // 401/403/404 使用真实 HTTP 状态码，便于浏览器与监控识别；其余业务错误按 200 渲染提示页
-        if (e.getCode() == 401 || e.getCode() == 403 || e.getCode() == 404) {
+        // 业务异常统一使用真实 HTTP 状态码（4xx/5xx），避免越权/重复提交等错误
+        // 在浏览器与监控里看起来像「成功返回 200」，只把 2xx 当正常。
+        if (e.getCode() >= 400 && e.getCode() <= 599) {
             response.setStatus(e.getCode());
         }
         ModelAndView mv = new ModelAndView("error/biz");
@@ -44,7 +48,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
-    public Object handleValid(Exception e, HttpServletRequest request) {
+    public Object handleValid(Exception e, HttpServletRequest request, HttpServletResponse response) {
         String msg;
         if (e instanceof MethodArgumentNotValidException) {
             msg = ((MethodArgumentNotValidException) e).getBindingResult().getFieldErrors().stream()
@@ -60,9 +64,56 @@ public class GlobalExceptionHandler {
         if (isAjax(request)) {
             return R.fail(400, msg);
         }
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
         ModelAndView mv = new ModelAndView("error/biz");
         mv.addObject("message", msg);
         return mv;
+    }
+
+    /**
+     * 路径变量 / 查询参数类型不匹配，例如 /order/create?itemId=abc。
+     * 默认会落到兜底 Exception 分支返回 500，这里改为 400，提示更准确。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Object handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request, HttpServletResponse response) {
+        String msg = "参数「" + e.getName() + "」格式不正确";
+        log.info("参数类型不匹配 uri={} param={} value={}", request.getRequestURI(), e.getName(), e.getValue());
+        if (isAjax(request)) {
+            return R.fail(400, msg);
+        }
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
+        ModelAndView mv = new ModelAndView("error/biz");
+        mv.addObject("message", msg);
+        return mv;
+    }
+
+    /**
+     * 缺少必填请求参数，例如删除留言时没带 itemId。
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public Object handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request, HttpServletResponse response) {
+        String msg = "缺少必填参数「" + e.getParameterName() + "」";
+        log.info("缺少参数 uri={} param={}", request.getRequestURI(), e.getParameterName());
+        if (isAjax(request)) {
+            return R.fail(400, msg);
+        }
+        response.setStatus(HttpStatus.BAD_REQUEST.value());
+        ModelAndView mv = new ModelAndView("error/biz");
+        mv.addObject("message", msg);
+        return mv;
+    }
+
+    /**
+     * 请求方法不被支持（如对只接受 POST 的地址发了 GET），返回 405 页面。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public Object handleMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request, HttpServletResponse response) {
+        log.info("请求方法不支持 uri={} method={}", request.getRequestURI(), e.getMethod());
+        if (isAjax(request)) {
+            return R.fail(405, "请求方式不支持");
+        }
+        response.setStatus(HttpStatus.METHOD_NOT_ALLOWED.value());
+        return new ModelAndView("error/405");
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

@@ -17,7 +17,7 @@ public class MailConsumer {
 
     private final MailService mailService;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_MAIL)
+    @RabbitListener(queues = RabbitMQConfig.QUEUE_MAIL, autoStartup = "${mq.consumer.enabled:true}")
     public void onMessage(MailMessage message) {
         log.info("收到邮件消息：to={} subject={}", message.getTo(), message.getSubject());
         mailService.send(message);

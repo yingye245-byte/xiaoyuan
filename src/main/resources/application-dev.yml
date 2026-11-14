@@ -35,6 +35,8 @@ spring:
       simple:
         acknowledge-mode: auto
         prefetch: 10
+        # 重试耗尽后丢弃而不是无限重投，避免同一笔坏消息反复刷日志
+        default-requeue-rejected: false
         retry:
           enabled: true
           max-attempts: 3

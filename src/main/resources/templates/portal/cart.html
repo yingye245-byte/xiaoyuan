@@ -34,8 +34,9 @@
                     </td>
                     <td class="price" th:text="'¥' + ${#numbers.formatDecimal(item.price, 1, 2)}">¥0</td>
                     <td>
-                        <span class="tag" th:classappend="${item.status == 1} ? 'tag-green' : 'tag-gray'"
-                              th:text="${item.status == 1} ? '在售' : '已下架'">在售</span>
+                        <span class="tag"
+                              th:classappend="${item.status == 1} ? 'tag-green' : (${item.status == 5} ? 'tag-orange' : 'tag-gray')"
+                              th:text="${item.statusText}">在售</span>
                     </td>
                     <td>
                         <div class="actions">
@@ -58,7 +59,7 @@
             </form>
             <div>
                 合计：<span class="price price-lg" th:text="'¥' + ${#numbers.formatDecimal(totalAmount, 1, 2)}">¥0</span>
-                <span class="small muted">（不含已下架物品，请逐件结算）</span>
+                <span class="small muted">（合计只包含在售物品，下架/交易中/已售出的物品请移除后结算）</span>
             </div>
         </div>
     </div>

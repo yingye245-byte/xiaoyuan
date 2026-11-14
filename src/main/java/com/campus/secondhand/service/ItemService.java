@@ -10,28 +10,35 @@ import com.campus.secondhand.dto.ItemQueryDTO;
 import com.campus.secondhand.entity.AuditRecord;
 import com.campus.secondhand.entity.Item;
 import com.campus.secondhand.entity.ItemImage;
+import com.campus.secondhand.entity.Orders;
 import com.campus.secondhand.exception.BusinessException;
 import com.campus.secondhand.mapper.AuditRecordMapper;
 import com.campus.secondhand.mapper.FavoriteMapper;
 import com.campus.secondhand.mapper.ItemImageMapper;
 import com.campus.secondhand.mapper.ItemMapper;
+import com.campus.secondhand.mapper.OrdersMapper;
 import com.campus.secondhand.mq.MailMessage;
 import com.campus.secondhand.mq.MqProducer;
 import com.campus.secondhand.mq.NotifyMessage;
 import com.campus.secondhand.utils.FileUtils;
 import com.campus.secondhand.utils.RedisKeys;
+import com.campus.secondhand.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 物品服务：发布/编辑/下架/检索/详情缓存/审核
@@ -47,8 +54,10 @@ public class ItemService {
     private final ItemImageMapper itemImageMapper;
     private final FavoriteMapper favoriteMapper;
     private final AuditRecordMapper auditRecordMapper;
+    private final OrdersMapper ordersMapper;
     private final FileUtils fileUtils;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate stringRedisTemplate;
     private final MqProducer mqProducer;
     private final UserService userService;
 
@@ -86,7 +95,10 @@ public class ItemService {
                 throw new BusinessException(404, "物品不存在或已下架");
             }
             fillText(item);
-            redisTemplate.opsForValue().set(RedisKeys.itemDetail(id), item, 10, TimeUnit.MINUTES);
+            // 只缓存「在售」快照：待审核/下架/驳回的详情不能进缓存，否则审核通过后仍会读到旧状态
+            if (isStatus(item.getStatus(), Constants.ITEM_ON_SALE)) {
+                redisTemplate.opsForValue().set(RedisKeys.itemDetail(id), item, 10, TimeUnit.MINUTES);
+            }
         }
         List<ItemImage> images = itemImageMapper.selectList(new LambdaQueryWrapper<ItemImage>()
                 .eq(ItemImage::getItemId, id).orderByAsc(ItemImage::getSort));
@@ -97,6 +109,12 @@ public class ItemService {
                     .eq(com.campus.secondhand.entity.Favorite::getItemId, id));
             item.setFavorited(favoriteCount != null && favoriteCount > 0);
         }
+        // 未上架的物品（待审核/已下架/已售出/驳回）只对卖家本人和管理员可见，
+        // 否则任何人遍历 id 就能看到未过审内容和管理员驳回理由。
+        boolean owner = currentUserId != null && currentUserId.equals(item.getSellerId());
+        if (!owner && !SecurityUtils.isAdmin() && !isStatus(item.getStatus(), Constants.ITEM_ON_SALE)) {
+            throw new BusinessException(404, "物品不存在或已下架");
+        }
         increaseView(id);
         return item;
     }
@@ -105,23 +123,34 @@ public class ItemService {
      * 浏览量：Redis 计数 + 每 20 次批量回写数据库，避免高频写表
      */
     private void increaseView(Long id) {
-        Long delta = redisTemplate.opsForValue().increment(RedisKeys.itemViews(id));
+        Long delta = stringRedisTemplate.opsForValue().increment(RedisKeys.itemViews(id));
         if (delta != null && delta % 20 == 0) {
-            flushViews(id, delta);
+            flushViews(id);
         }
     }
 
     /**
-     * 把 Redis 中的增量浏览量合并进数据库
+     * 把 Redis 中的增量浏览量合并进数据库。
+     * 用 getAndDelete 保证「取值 + 清零」原子，避免并发下重复累加或丢增量。
      */
-    public void flushViews(Long id, long delta) {
+    public void flushViews(Long id) {
+        String value = stringRedisTemplate.opsForValue().getAndDelete(RedisKeys.itemViews(id));
+        long delta = 0L;
+        try {
+            if (value != null) {
+                delta = Long.parseLong(value);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("物品 {} 的浏览计数格式异常：{}", id, value);
+        }
         if (delta <= 0) {
             return;
         }
         itemMapper.update(null, new LambdaUpdateWrapper<Item>()
                 .eq(Item::getId, id)
                 .setSql("view_count = view_count + " + delta));
-        redisTemplate.delete(RedisKeys.itemViews(id));
+        // 浏览量变了，详情缓存里的 viewCount 也要失效，否则页面显示旧数字
+        redisTemplate.delete(RedisKeys.itemDetail(id));
         log.info("物品 {} 浏览量回写 {} 次", id, delta);
     }
 
@@ -193,6 +222,11 @@ public class ItemService {
             throw new BusinessException("该物品已售出或正在交易，不能编辑");
         }
         List<String> keep = dto.getKeepImages() == null ? new ArrayList<>() : new ArrayList<>(dto.getKeepImages());
+        // keepImages 由表单提交，必须校验确实属于该物品，否则可以写入任意外部 URL 当封面
+        Set<String> ownedImages = itemImageMapper.selectList(new LambdaQueryWrapper<ItemImage>()
+                        .eq(ItemImage::getItemId, exist.getId()))
+                .stream().map(ItemImage::getUrl).collect(Collectors.toSet());
+        keep.removeIf(url -> url == null || !ownedImages.contains(url));
         List<MultipartFile> newFiles = dto.getImages() == null ? List.of()
                 : dto.getImages().stream().filter(f -> f != null && !f.isEmpty()).toList();
         if (keep.size() + newFiles.size() > MAX_IMAGE) {
@@ -204,19 +238,21 @@ public class ItemService {
         for (MultipartFile file : newFiles) {
             keep.add(fileUtils.save(file, "item"));
         }
-        Item update = new Item();
-        update.setId(exist.getId());
-        update.setCategoryId(dto.getCategoryId());
-        update.setTitle(dto.getTitle());
-        update.setDescription(dto.getDescription());
-        update.setPrice(dto.getPrice());
-        update.setOriginalPrice(dto.getOriginalPrice());
-        update.setConditionLevel(dto.getConditionLevel());
-        update.setCampus(dto.getCampus());
-        update.setCoverImg(keep.get(0));
-        update.setStatus(Constants.ITEM_WAIT_AUDIT);
-        update.setAuditRemark(null);
-        itemMapper.updateById(update);
+        // 用 UpdateWrapper 显式 set：MP 的 updateById 默认忽略 null 字段，
+        // 会导致编辑后旧审核驳回理由清不掉（页面一直显示上一条驳回原因）。
+        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+                .eq(Item::getId, exist.getId())
+                .set(Item::getCategoryId, dto.getCategoryId())
+                .set(Item::getTitle, dto.getTitle())
+                .set(Item::getDescription, dto.getDescription())
+                .set(Item::getPrice, dto.getPrice())
+                .set(Item::getOriginalPrice, dto.getOriginalPrice())
+                .set(Item::getConditionLevel, dto.getConditionLevel())
+                .set(Item::getCampus, dto.getCampus())
+                .set(Item::getCoverImg, keep.get(0))
+                .set(Item::getStatus, Constants.ITEM_WAIT_AUDIT)
+                .set(Item::getAuditRemark, null)
+                .set(Item::getUpdateTime, LocalDateTime.now()));
 
         itemImageMapper.delete(new LambdaQueryWrapper<ItemImage>().eq(ItemImage::getItemId, exist.getId()));
         saveImages(exist.getId(), keep);
@@ -233,8 +269,14 @@ public class ItemService {
         if (!isStatus(item.getStatus(), Constants.ITEM_ON_SALE)) {
             throw new BusinessException("只有在售物品才能下架");
         }
-        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
-                .eq(Item::getId, id).set(Item::getStatus, Constants.ITEM_OFFLINE));
+        // CAS：只有当前仍是「在售」才改成「已下架」，避免把并发进来的「交易中」覆盖掉
+        int rows = itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+                .eq(Item::getId, id)
+                .eq(Item::getStatus, Constants.ITEM_ON_SALE)
+                .set(Item::getStatus, Constants.ITEM_OFFLINE));
+        if (rows == 0) {
+            throw new BusinessException("物品状态已变化，请刷新后重试");
+        }
         evictItemCache(id);
         log.info("物品 {} 已下架", id);
     }
@@ -249,10 +291,14 @@ public class ItemService {
                 && !isStatus(item.getStatus(), Constants.ITEM_AUDIT_REJECT)) {
             throw new BusinessException("当前状态不能重新上架");
         }
-        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+        int rows = itemMapper.update(null, new LambdaUpdateWrapper<Item>()
                 .eq(Item::getId, id)
+                .in(Item::getStatus, Constants.ITEM_OFFLINE, Constants.ITEM_AUDIT_REJECT)
                 .set(Item::getStatus, Constants.ITEM_WAIT_AUDIT)
                 .set(Item::getAuditRemark, null));
+        if (rows == 0) {
+            throw new BusinessException("物品状态已变化，请刷新后重试");
+        }
         evictItemCache(id);
     }
 
@@ -264,6 +310,15 @@ public class ItemService {
         Item item = getOwnItem(id, userId);
         if (isStatus(item.getStatus(), Constants.ITEM_LOCKED)) {
             throw new BusinessException("物品正在交易中，不能删除");
+        }
+        if (isStatus(item.getStatus(), Constants.ITEM_SOLD)) {
+            throw new BusinessException("已售出的物品不能删除，历史订单需要保留该物品信息");
+        }
+        // 有任何订单引用（含已取消）都不允许删除，否则订单详情里物品标题/图片会变成空
+        Long orderCount = ordersMapper.selectCount(new LambdaQueryWrapper<Orders>()
+                .eq(Orders::getItemId, id));
+        if (orderCount != null && orderCount > 0) {
+            throw new BusinessException("该物品已有订单记录，不能删除，可改为下架");
         }
         itemMapper.deleteById(id);
         evictItemCache(id);
@@ -326,10 +381,18 @@ public class ItemService {
         if (isStatus(item.getStatus(), Constants.ITEM_LOCKED)) {
             throw new BusinessException("交易中的物品不能下架");
         }
-        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+        // 已售出的物品必须保持「已售出」，否则卖家重提后会二次成交，同一物品出现两张有效订单
+        if (isStatus(item.getStatus(), Constants.ITEM_SOLD)) {
+            throw new BusinessException("该物品已成交，不能下架");
+        }
+        int rows = itemMapper.update(null, new LambdaUpdateWrapper<Item>()
                 .eq(Item::getId, id)
+                .eq(Item::getStatus, item.getStatus())
                 .set(Item::getStatus, Constants.ITEM_OFFLINE)
                 .set(Item::getAuditRemark, reason));
+        if (rows == 0) {
+            throw new BusinessException("物品状态已变化，请刷新后重试");
+        }
         evictItemCache(id);
         mqProducer.sendNotify(new NotifyMessage(item.getSellerId(), "audit", "物品被管理员下架",
                 "《" + item.getTitle() + "》已被管理员下架，原因：" + (reason == null ? "违规发布" : reason),
@@ -364,6 +427,10 @@ public class ItemService {
         if (item == null) {
             throw new BusinessException(404, "物品不存在");
         }
+        fillText(item);
+        // 编辑页要靠 images 渲染「保留原图」复选框，这里必须一起查出来
+        item.setImages(itemImageMapper.selectList(new LambdaQueryWrapper<ItemImage>()
+                .eq(ItemImage::getItemId, id).orderByAsc(ItemImage::getSort)));
         return item;
     }
 
@@ -377,6 +444,9 @@ public class ItemService {
         redisTemplate.delete(RedisKeys.itemDetail(id));
         redisTemplate.delete(RedisKeys.itemNull(id));
         redisTemplate.delete(RedisKeys.ITEM_HOT);
+        // 首页分类的「在售 N 件」与统计卡都依赖物品状态，物品变更后必须一起失效
+        redisTemplate.delete(RedisKeys.CATEGORY_ALL);
+        redisTemplate.delete(RedisKeys.STAT_OVERVIEW);
     }
 
     private void saveImages(Long itemId, List<String> paths) {

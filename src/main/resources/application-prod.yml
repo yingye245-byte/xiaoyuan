@@ -36,6 +36,18 @@ spring:
     password: ${MQ_PASSWORD:guest}
     publisher-confirm-type: correlated
     publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: auto
+        prefetch: 10
+        # 消费失败最多重试 3 次，仍失败则丢弃（不无限 requeue，避免毒消息把队列堵死）
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000ms
+          multiplier: 2.0
+          max-interval: 10000ms
   thymeleaf:
     cache: true
   mail:

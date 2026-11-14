@@ -82,15 +82,15 @@
                                         <button class="btn btn-sm" type="submit">驳回</button>
                                     </form>
                                 </div>
-                                <!-- 在售 / 交易中中：违规下架 -->
-                                <form th:if="${it.status == 1 or it.status == 5}" class="inline-form"
+                                <!-- 仅在售物品可违规下架；交易中会锁定状态，后端已拒绝，界面也不该给按钮 -->
+                                <form th:if="${it.status == 1}" class="inline-form"
                                       th:action="@{/admin/items/{id}/offline(id=${it.id})}" method="post">
                                     <input class="input" type="text" name="reason"
                                            placeholder="违规原因"/>
                                     <button class="btn btn-sm" type="submit"
                                             th:data-confirm="'确认下架该物品？'">下架</button>
                                 </form>
-                                <span class="small muted" th:if="${it.status != 0 and it.status != 1 and it.status != 5}">—</span>
+                                <span class="small muted" th:if="${it.status != 0 and it.status != 1}">—</span>
                             </td>
                         </tr>
                         <tr th:if="${#lists.isEmpty(page.records)}">

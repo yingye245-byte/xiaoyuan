@@ -63,7 +63,7 @@ public class AdminCategoryController {
     @PostMapping("/update")
     public String update(@RequestParam Long id,
                          @RequestParam String name,
-                         @RequestParam(defaultValue = "0") Long parentId,
+                         @RequestParam(required = false) Long parentId,
                          @RequestParam(required = false) String icon,
                          @RequestParam(defaultValue = "0") Integer sort,
                          RedirectAttributes redirectAttributes) {
@@ -71,6 +71,11 @@ public class AdminCategoryController {
             Category category = new Category();
             category.setId(id);
             category.setName(name);
+            // 表单没提交 parentId 时沿用原父级，不能默认成 0 把二级分类提成一级
+            if (parentId == null) {
+                Category exist = categoryService.getById(id);
+                parentId = exist.getParentId() == null ? 0L : exist.getParentId();
+            }
             category.setParentId(parentId);
             category.setIcon(icon);
             category.setSort(sort);

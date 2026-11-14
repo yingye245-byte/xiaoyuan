@@ -51,7 +51,7 @@
         <!-- 资料编辑 -->
         <div class="card">
             <div class="card-title">编辑资料</div>
-            <div class="flash flash-error" th:if="${error != null}" th:text="${error}"></div>
+            
 
             <form th:action="@{/user/profile}" method="post" th:object="${profileDTO}">
                 <div class="form-item">

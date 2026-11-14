@@ -58,9 +58,17 @@ file:
 app:
   page-size: 12
   admin-page-size: 10
+  security:
+    # remember-me 签名密钥，生产环境请用环境变量 REMEMBER_ME_KEY 覆盖
+    remember-me-key: ${REMEMBER_ME_KEY:campus-secondhand-remember-key}
   mail:
     mock: true
     from-name: 校园二手平台
+
+# 日志目录：logback 用 logging.file.path 作为输出目录，部署时用 LOG_PATH 环境变量覆盖
+logging:
+  file:
+    path: ${LOG_PATH:logs}
 
 # RabbitMQ 业务参数
 mq:

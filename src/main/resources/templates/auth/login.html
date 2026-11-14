@@ -11,6 +11,9 @@
         <div class="flash flash-error" th:if="${param.error}">
             登录失败：用户名或密码不正确，或账号已被管理员禁用
         </div>
+        <div class="flash flash-error" th:if="${param.disabled}">
+            你的账号已被管理员禁用，已强制退出登录，如有疑问请联系管理员
+        </div>
         <div class="flash flash-success" th:if="${param.logout}">您已安全退出登录</div>
         <div class="flash flash-success" th:if="${msg != null}" th:text="${msg}"></div>
 
