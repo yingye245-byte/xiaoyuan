@@ -40,6 +40,7 @@
 campus-secondhand
 ├── pom.xml
 ├── sql/01-init.sql                        # 建库建表 + 索引 + 注释 + 演示种子数据（15 张表）
+├── assets/demo/                           # 18 张演示图（12 物品封面 + 6 头像），拷到上传目录即可用
 ├── deploy/                                # Linux 部署物料
 │   ├── campus-secondhand.service          # systemd 单元
 │   ├── nginx.conf                         # Nginx 反向代理 / 静态资源 / 上传目录
@@ -50,7 +51,8 @@ campus-secondhand
 │   ├── 02-数据库设计说明.md
 │   ├── 03-部署文档.md
 │   ├── 04-答辩要点与演示脚本.md
-│   └── 05-项目开发说明与提示词.md
+│   ├── 05-项目开发说明与提示词.md
+│   └── screenshots/                       # 8 张验收截图（首页/详情/看板/审核/分类/用户/订单/邮件日志）
 ├── src/main/java/com/campus/secondhand
 │   ├── SecondhandApplication.java
 │   ├── common/        R 统一返回、Constants 状态常量、GlobalExceptionHandler、GlobalModelAdvice
@@ -90,6 +92,17 @@ mysql --host=127.0.0.1 --port=3306 --user=root --password=你的密码 < sql/01-
 ```
 
 脚本会创建 `campus_secondhand` 库、15 张表、索引与注释，并写入演示数据（6 个账号、20 件物品、8 笔订单、留言/收藏/审核记录/站内消息/7 天统计/邮件日志）。
+
+### 4.2.1 放置演示图片
+
+种子数据里物品封面与头像引用 `/upload/demo/item-01.jpg`、`avatar-01.jpg` 等路径，需把仓库自带的 `assets/demo/`（18 张）复制到上传目录：
+
+```powershell
+New-Item -ItemType Directory -Force -Path D:\campus-upload\demo | Out-Null
+Copy-Item assets\demo\* D:\campus-upload\demo\ -Force
+```
+
+上传目录由 `application.yml` 的 `file.upload-path` 决定（默认 `D:/campus-upload/`），换目录时两边一起改。
 
 ### 4.3 配置数据库密码
 
@@ -140,7 +153,7 @@ java -jar target/campus-secondhand.jar
 1. **启动报 `Access denied for user 'root'`**：数据库密码没配对，见 4.3，用 `MYSQL_PASSWORD` 环境变量覆盖。
 2. **启动报 RabbitMQ 连接失败**：确认 5672 端口可连、账号 guest/guest；如果只想跑前台，可先停用消费者（`mq.consumer.enabled=false` 仅影响测试环境配置，dev 请保持开启以演示异步能力）。
 3. **邮件发不出去**：默认 `app.mail.mock: true`，只把邮件内容渲染后写入 `tb_mail_log`，不真正外发，答辩演示无需配置真实邮箱；要真发邮件时把 `MAIL_MOCK` 设为 false 并填 `spring.mail.username/password`。
-4. **图片 404**：上传目录由 `file.upload-path` 决定（默认 `D:/campus-upload/`），种子数据图片在 `D:/campus-upload/demo/`，请把 `sql/01-init.sql` 附带的演示图一并放到该目录，或改成自己的路径。
+4. **图片 404**：上传目录由 `file.upload-path` 决定（默认 `D:/campus-upload/`），请把仓库 `assets/demo/` 下的 18 张演示图复制到该目录的 `demo/` 子目录（见 4.2.1），或改成自己的路径。
 5. **端口冲突**：改 `application.yml` 的 `server.port`。
 6. **演示 30 分钟超时太长**：临时用 `SPRING_APPLICATION_JSON='{"mq":{"order":{"delay-ms":60000}}}'` 覆盖为 60 秒；注意 RabbitMQ 队列已按旧 TTL 声明过时需要先在管理台删除 `sc.order.delay.queue`，否则会参数冲突。
 
