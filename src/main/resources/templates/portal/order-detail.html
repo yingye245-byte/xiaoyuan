@@ -73,8 +73,9 @@
 
         <!-- 待支付倒计时提示 -->
         <div class="flash flash-error" th:if="${order.status == 0}"
-             th:attr="data-created=${#temporals.format(order.createTime, 'yyyy-MM-dd''T''HH:mm:ss')}"
-             id="payCountdown">
+             th:attr="data-deadline=${deadlineMillis},data-timeout=${timeoutMinutes}"
+             id="payCountdown"
+             th:text="'请在 ' + ${timeoutMinutes} + ' 分钟内完成支付，超时订单将被系统自动关闭'">
             请在 30 分钟内完成支付，超时订单将被系统自动关闭
         </div>
 
@@ -113,11 +114,12 @@
         if (!box) {
             return;
         }
-        var created = box.getAttribute('data-created');
-        if (!created) {
+        // 直接用服务端算好的毫秒时间戳，避免各浏览器对日期字符串解析不一致导致 NaN
+        var deadline = parseInt(box.getAttribute('data-deadline'), 10);
+        var timeout = parseInt(box.getAttribute('data-timeout'), 10) || 30;
+        if (!deadline || isNaN(deadline)) {
             return;
         }
-        var deadline = new Date(created.replace(/-/g, '/')).getTime() + 30 * 60 * 1000;
         function tick() {
             var left = deadline - Date.now();
             if (left <= 0) {

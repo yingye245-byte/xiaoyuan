@@ -8,6 +8,7 @@ import com.campus.secondhand.service.OrderService;
 import com.campus.secondhand.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -28,6 +30,10 @@ public class OrderController {
 
     private final OrderService orderService;
     private final ItemService itemService;
+
+    /** 待支付超时分钟数，与 MQ 延迟队列、定时任务使用同一个配置项 */
+    @Value("${app.order-timeout-minutes:30}")
+    private int orderTimeoutMinutes;
 
     /**
      * 下单确认页：生成一次性幂等令牌
@@ -68,6 +74,14 @@ public class OrderController {
         Orders order = orderService.detail(id, SecurityUtils.getUserId());
         model.addAttribute("order", order);
         model.addAttribute("isBuyer", order.getBuyerId().equals(SecurityUtils.getUserId()));
+        // 待支付倒计时用绝对时间戳交给前端，避免字符串解析在不同浏览器上出现 NaN
+        long deadlineMillis = order.getCreateTime()
+                .plusMinutes(orderTimeoutMinutes)
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli();
+        model.addAttribute("deadlineMillis", deadlineMillis);
+        model.addAttribute("timeoutMinutes", orderTimeoutMinutes);
         return "portal/order-detail";
     }
 
