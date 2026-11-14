@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>403 - 没有访问权限</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-sub">403</div>
+        <h2>没有访问权限</h2>
+        <p class="muted mt-8">
+            当前账号的角色不允许访问该页面。后台管理、物品审核等操作仅限管理员；
+            发布物品需要卖家权限（普通用户发布物品后会自动获得）。
+        </p>
+        <div class="mt-16">
+            <a class="btn btn-primary" th:href="@{/}">返回首页</a>
+            <a class="btn" th:href="@{/login}">切换账号</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

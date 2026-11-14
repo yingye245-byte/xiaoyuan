@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('邮件日志')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('邮件日志')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="card">
+                <div class="flex-between">
+                    <div class="card-title">异步邮件发送记录</div>
+                    <span class="small muted">
+                        由 RabbitMQ 消费者异步发送并回写 tb_mail_log（当前应用为
+                        <b th:text="${@environment.getProperty('app.mail.mock') == 'true' ? '模拟发送' : '真实发送'}">模拟发送</b>）
+                    </span>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:70px">ID</th>
+                            <th style="width:230px">收件人</th>
+                            <th>主题</th>
+                            <th style="width:110px">业务类型</th>
+                            <th style="width:90px">状态</th>
+                            <th>失败信息</th>
+                            <th style="width:170px">发送时间</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="m : ${page.records}">
+                            <td th:text="${m.id}">1</td>
+                            <td class="small" th:text="${m.toEmail}">mail@example.com</td>
+                            <td class="small" th:text="${m.subject}">主题</td>
+                            <td>
+                                <span class="tag tag-gray" th:text="${m.bizType}">ORDER</span>
+                            </td>
+                            <td>
+                                <span class="tag" th:classappend="${m.status == 1} ? 'tag-green' : 'tag-red'"
+                                      th:text="${m.status == 1} ? '成功' : '失败'">成功</span>
+                            </td>
+                            <td class="small muted" th:text="${m.errorMsg != null ? m.errorMsg : '—'}">—</td>
+                            <td class="small muted"
+                                th:text="${#temporals.format(m.createTime, 'yyyy-MM-dd HH:mm:ss')}">时间</td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(page.records)}">
+                            <td colspan="7" class="muted text-center">暂无邮件记录</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div th:replace="~{fragments/common :: pager(${page})}"></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

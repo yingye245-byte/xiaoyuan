@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('我的消息')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('messages')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+
+    <div class="section-head mt-16">
+        <h2>我的消息
+            <span class="small muted" th:text="'（未读 ' + ${unread} + ' 条）'">（未读 0 条）</span>
+        </h2>
+        <form th:action="@{/user/messages/read-all}" method="post" th:if="${unread > 0}">
+            <button class="btn btn-sm" type="submit">全部标为已读</button>
+        </form>
+    </div>
+
+    <div class="card" th:if="${!#lists.isEmpty(page.records)}">
+        <div th:each="m : ${page.records}" class="comment">
+            <div class="flex-between">
+                <div class="flex-center gap-8">
+                    <span class="tag tag-red" th:if="${m.isRead == 0}">未读</span>
+                    <span class="tag tag-gray" th:if="${m.isRead != 0}">已读</span>
+                    <span class="fw-600" th:text="${m.title}">消息标题</span>
+                </div>
+                <span class="small muted"
+                      th:text="${#temporals.format(m.createTime, 'yyyy-MM-dd HH:mm')}">时间</span>
+            </div>
+            <div class="comment-body mt-8" th:text="${m.content}">消息内容</div>
+            <div class="comment-actions">
+                <form th:action="@{'/user/messages/' + ${m.id} + '/read'}" method="post" th:if="${m.isRead == 0}">
+                    <button class="btn btn-sm btn-ghost" type="submit">标为已读</button>
+                </form>
+                <a class="btn btn-sm btn-ghost" th:if="${m.bizType == 'ORDER' and m.bizId != null}"
+                   th:href="@{'/order/' + ${m.bizId}}">查看订单</a>
+                <a class="btn btn-sm btn-ghost" th:if="${m.bizType == 'ITEM' and m.bizId != null}"
+                   th:href="@{'/item/' + ${m.bizId}}">查看物品</a>
+            </div>
+        </div>
+    </div>
+
+    <th:block th:if="${#lists.isEmpty(page.records)}"><div th:replace="~{fragments/common :: empty('暂无消息，交易过程中系统会在这里通知你')}"></div></th:block>
+
+    <div th:replace="~{fragments/common :: pager(${page})}"></div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

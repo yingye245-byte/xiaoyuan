@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('分配角色')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('分配角色')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="card" style="max-width:620px">
+                <div class="card-title">为「<span th:text="${targetUser.nickname}">用户</span>」分配角色</div>
+                <p class="small muted">
+                    用户名：<b th:text="${targetUser.username}">username</b>　
+                    校区：<b th:text="${targetUser.campus}">校区</b>　
+                    当前角色：<b th:text="${targetUser.roleNames}">角色</b>
+                </p>
+
+                <form th:action="@{/admin/users/{id}/roles(id=${targetUser.id})}" method="post">
+                    <div class="form-item">
+                        <label class="form-label">可分配角色（至少保留一个）</label>
+                        <label class="role-option" th:each="r : ${roles}">
+                            <input type="checkbox" name="roleIds" th:value="${r.id}"
+                                   th:checked="${#lists.contains(selectedRoleIds, r.id)}"/>
+                            <span>
+                                <b th:text="${r.name}">角色名</b>
+                                <span class="muted small" th:text="'（' + ${r.code} + '）'">（code）</span>
+                                <span class="muted small" th:text="${r.remark}">描述</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="flex-center gap-12 mt-16">
+                        <button class="btn btn-primary" type="submit">保存角色</button>
+                        <a class="btn" th:href="@{/admin/users}">返回列表</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

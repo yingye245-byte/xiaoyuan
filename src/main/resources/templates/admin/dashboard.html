@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('数据看板')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('数据看板')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <!-- ============ 概览指标 ============ -->
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="label">注册用户</div>
+                    <div class="value brand" th:text="${overview.userCount}">0</div>
+                    <div class="foot">含买家 / 卖家 / 管理员</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">在售物品</div>
+                    <div class="value accent" th:text="${overview.onSaleCount}">0</div>
+                    <div class="foot">累计发布 <span th:text="${overview.itemCount}">0</span> 件</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">成交订单</div>
+                    <div class="value green" th:text="${overview.finishCount}">0</div>
+                    <div class="foot">全部订单 <span th:text="${overview.orderCount}">0</span> 笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">累计成交额</div>
+                    <div class="value" th:text="'￥' + ${overview.tradeAmount}">￥0</div>
+                    <div class="foot">待审核 <span th:text="${overview.waitAuditCount}">0</span> 件 · 留言 <span
+                            th:text="${overview.commentCount}">0</span> 条</div>
+                </div>
+            </div>
+
+            <div class="chart-row">
+                <div class="chart-box">
+                    <div class="chart-head">
+                        <h3>近 7 天发布 / 订单趋势</h3>
+                        <span class="small muted">数据来源：ECharts 异步接口</span>
+                    </div>
+                    <div class="chart-canvas" id="trendChart"></div>
+                </div>
+                <div class="chart-box">
+                    <div class="chart-head"><h3>分类在售分布</h3></div>
+                    <div class="chart-canvas" id="categoryChart"></div>
+                </div>
+            </div>
+
+            <div class="chart-row">
+                <div class="chart-box">
+                    <div class="chart-head"><h3>成交额 TOP5 卖家</h3></div>
+                    <div class="chart-canvas short" id="sellerChart"></div>
+                </div>
+                <div class="chart-box">
+                    <div class="chart-head"><h3>订单状态分布</h3></div>
+                    <div class="chart-canvas short" id="statusChart"></div>
+                </div>
+            </div>
+
+            <!-- ============ 待审核 / 最近订单 ============ -->
+            <div class="card mb-16">
+                <div class="flex-between">
+                    <div class="card-title">待审核物品</div>
+                    <a class="small" th:href="@{/admin/items(status=0)}">查看全部 →</a>
+                </div>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:70px">封面</th>
+                            <th>标题</th>
+                            <th style="width:110px">卖家</th>
+                            <th style="width:100px">价格</th>
+                            <th style="width:160px">提交时间</th>
+                            <th style="width:150px">操作</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="it : ${waitAuditItems}">
+                            <td><img class="cell-img" th:src="${it.coverImg}" alt="封面"/></td>
+                            <td>
+                                <a th:href="@{/item/{id}(id=${it.id})}" target="_blank" th:text="${it.title}">标题</a>
+                            </td>
+                            <td th:text="${it.sellerName}">卖家</td>
+                            <td class="price" th:text="'￥' + ${it.price}">￥0</td>
+                            <td class="small muted"
+                                th:text="${#temporals.format(it.createTime, 'MM-dd HH:mm')}">时间</td>
+                            <td>
+                                <form class="inline-form" th:action="@{/admin/items/{id}/audit(id=${it.id})}"
+                                      method="post">
+                                    <input type="hidden" name="pass" value="true"/>
+                                    <button class="btn btn-sm btn-primary" type="submit">通过</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(waitAuditItems)}">
+                            <td colspan="6" class="muted text-center">暂无待审核物品</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="flex-between">
+                    <div class="card-title">最近订单</div>
+                    <a class="small" th:href="@{/admin/orders}">查看全部 →</a>
+                </div>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:190px">订单号</th>
+                            <th>物品</th>
+                            <th style="width:110px">买家</th>
+                            <th style="width:100px">金额</th>
+                            <th style="width:110px">状态</th>
+                            <th style="width:160px">下单时间</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="o : ${recentOrders}">
+                            <td class="small" th:text="${o.orderNo}">单号</td>
+                            <td th:text="${o.itemTitle}">物品</td>
+                            <td th:text="${o.buyerName}">买家</td>
+                            <td class="price" th:text="'￥' + ${o.amount}">￥0</td>
+                            <td><span class="tag tag-gray" th:text="${o.statusText}">状态</span></td>
+                            <td class="small muted"
+                                th:text="${#temporals.format(o.createTime, 'MM-dd HH:mm')}">时间</td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(recentOrders)}">
+                            <td colspan="6" class="muted text-center">暂无订单</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/lib/echarts.min.js}"></script>
+<script th:inline="javascript">
+    (function () {
+        var chartTheme = {color: ['#2f6fed', '#ff7a45', '#22b07d', '#f5b638', '#8b5cf6', '#31a6d8']};
+        var trend = echarts.init(document.getElementById('trendChart'));
+        var category = echarts.init(document.getElementById('categoryChart'));
+        var seller = echarts.init(document.getElementById('sellerChart'));
+        var status = echarts.init(document.getElementById('statusChart'));
+
+        function loading(c) {
+            c.showLoading({text: '加载中…', color: '#2f6fed', textColor: '#6b7280', maskColor: 'rgba(255,255,255,.7)'});
+        }
+
+        [trend, category, seller, status].forEach(loading);
+
+        fetch('/admin/api/stat/all')
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (res) {
+                if (!res || res.code !== 200) {
+                    throw new Error('接口返回异常');
+                }
+                var d = res.data;
+
+                /* ---------- 趋势（折线 + 柱状） ---------- */
+                var itemTrend = d.itemTrend || [];
+                var orderTrend = d.orderTrend || [];
+                var days = [];
+                itemTrend.forEach(function (x) {
+                    days.push(x.day);
+                });
+                orderTrend.forEach(function (x) {
+                    if (days.indexOf(x.day) < 0) {
+                        days.push(x.day);
+                    }
+                });
+                days.sort();
+
+                function pick(list, day) {
+                    for (var i = 0; i < list.length; i++) {
+                        if (list[i].day === day) {
+                            return Number(list[i].cnt);
+                        }
+                    }
+                    return 0;
+                }
+
+                trend.hideLoading();
+                trend.setOption({
+                    color: chartTheme.color,
+                    tooltip: {trigger: 'axis'},
+                    legend: {data: ['发布物品', '订单数'], bottom: 0, icon: 'roundRect'},
+                    grid: {left: 40, right: 20, top: 20, bottom: 44},
+                    xAxis: {type: 'category', data: days, axisLine: {lineStyle: {color: '#dfe4ec'}}},
+                    yAxis: {type: 'value', splitLine: {lineStyle: {color: '#f0f3f8'}}},
+                    series: [
+                        {
+                            name: '发布物品', type: 'line', smooth: true, symbolSize: 6,
+                            areaStyle: {opacity: .12},
+                            data: days.map(function (day) {
+                                return pick(itemTrend, day);
+                            })
+                        },
+                        {
+                            name: '订单数', type: 'line', smooth: true, symbolSize: 6,
+                            areaStyle: {opacity: .08},
+                            data: days.map(function (day) {
+                                return pick(orderTrend, day);
+                            })
+                        }
+                    ]
+                });
+
+                /* ---------- 分类饼图 ---------- */
+                var catData = (d.category || []).map(function (x) {
+                    return {name: x.name, value: Number(x.cnt)};
+                });
+                category.hideLoading();
+                category.setOption({
+                    color: chartTheme.color,
+                    tooltip: {trigger: 'item', formatter: '{b}：{c} 件（{d}%）'},
+                    legend: {bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8},
+                    series: [{
+                        type: 'pie',
+                        radius: ['42%', '66%'],
+                        center: ['50%', '45%'],
+                        avoidLabelOverlap: true,
+                        label: {show: true, formatter: '{b}\n{c}'},
+                        data: catData
+                    }]
+                });
+
+                /* ---------- 卖家条形图 ---------- */
+                var sellers = (d.topSellers || []).slice().reverse();
+                seller.hideLoading();
+                seller.setOption({
+                    color: ['#2f6fed'],
+                    tooltip: {trigger: 'axis', axisPointer: {type: 'shadow'}},
+                    grid: {left: 90, right: 30, top: 10, bottom: 20},
+                    xAxis: {type: 'value', splitLine: {lineStyle: {color: '#f0f3f8'}}},
+                    yAxis: {
+                        type: 'category',
+                        data: sellers.map(function (x) {
+                            return x.name;
+                        })
+                    },
+                    series: [{
+                        type: 'bar',
+                        barWidth: 16,
+                        itemStyle: {borderRadius: [0, 6, 6, 0]},
+                        label: {show: true, position: 'right', formatter: '￥{c}'},
+                        data: sellers.map(function (x) {
+                            return Number(x.cnt);
+                        })
+                    }]
+                });
+
+                /* ---------- 订单状态环形图 ---------- */
+                var statusName = {0: '待支付', 1: '已支付待交付', 2: '已完成', 3: '已取消'};
+                var statusData = (d.orderStatus || []).map(function (x) {
+                    return {name: statusName[x.status] || ('状态' + x.status), value: Number(x.cnt)};
+                });
+                status.hideLoading();
+                status.setOption({
+                    color: ['#f5b638', '#2f6fed', '#22b07d', '#b6bfcc'],
+                    tooltip: {trigger: 'item', formatter: '{b}：{c} 笔（{d}%）'},
+                    legend: {bottom: 0, icon: 'circle', itemWidth: 8, itemHeight: 8},
+                    series: [{
+                        type: 'pie',
+                        radius: ['46%', '68%'],
+                        center: ['50%', '44%'],
+                        label: {show: false},
+                        data: statusData
+                    }]
+                });
+            })
+            .catch(function (err) {
+                [trend, category, seller, status].forEach(function (c) {
+                    c.hideLoading();
+                    c.setOption({
+                        title: {
+                            text: '数据加载失败：' + err.message,
+                            left: 'center',
+                            top: 'middle',
+                            textStyle: {fontSize: 13, color: '#b6bfcc', fontWeight: 'normal'}
+                        }
+                    });
+                });
+            });
+
+        window.addEventListener('resize', function () {
+            [trend, category, seller, status].forEach(function (c) {
+                c.resize();
+            });
+        });
+    })();
+</script>
+</body>
+</html>

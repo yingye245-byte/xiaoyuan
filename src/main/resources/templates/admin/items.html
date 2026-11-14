@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('物品审核')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('物品审核')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <form class="toolbar" th:action="@{/admin/items}" method="get">
+                <input class="input" type="text" name="keyword" th:value="${keyword}" placeholder="搜索物品标题 / 描述"/>
+                <select class="select" name="status">
+                    <option value="" th:selected="${status == null}">全部状态</option>
+                    <option value="0" th:selected="${status != null and status == 0}">待审核</option>
+                    <option value="1" th:selected="${status != null and status == 1}">在售</option>
+                    <option value="2" th:selected="${status != null and status == 2}">已下架</option>
+                    <option value="3" th:selected="${status != null and status == 3}">已售出</option>
+                    <option value="4" th:selected="${status != null and status == 4}">已驳回</option>
+                    <option value="5" th:selected="${status != null and status == 5}">交易中</option>
+                </select>
+                <button class="btn btn-primary btn-sm" type="submit">查询</button>
+                <a class="btn btn-sm" th:href="@{/admin/items(status=0)}">只看待审核</a>
+                <a class="btn btn-sm" th:href="@{/admin/items}">重置</a>
+                <span class="small muted">共 <b th:text="${page.total}">0</b> 件</span>
+            </form>
+
+            <div class="card">
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:60px">ID</th>
+                            <th style="width:70px">封面</th>
+                            <th>标题</th>
+                            <th style="width:110px">分类</th>
+                            <th style="width:110px">卖家</th>
+                            <th style="width:100px">价格</th>
+                            <th style="width:90px">成色</th>
+                            <th style="width:90px">状态</th>
+                            <th style="width:160px">发布时间</th>
+                            <th style="width:220px">审核 / 处置</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="it : ${page.records}">
+                            <td th:text="${it.id}">1</td>
+                            <td><img class="cell-img" th:src="${it.coverImg}" alt="封面"/></td>
+                            <td>
+                                <a th:href="@{/item/{id}(id=${it.id})}" target="_blank" th:text="${it.title}">标题</a>
+                                <div class="small muted" th:if="${it.auditRemark != null}"
+                                     th:text="'驳回原因：' + ${it.auditRemark}">原因</div>
+                            </td>
+                            <td class="small" th:text="${it.categoryName}">分类</td>
+                            <td class="small" th:text="${it.sellerName}">卖家</td>
+                            <td class="price" th:text="'￥' + ${it.price}">￥0</td>
+                            <td class="small" th:text="${it.conditionText}">成色</td>
+                            <td>
+                                <span class="tag"
+                                      th:classappend="${it.status == 0} ? 'tag-orange' : (${it.status == 1} ? 'tag-green' : 'tag-gray')"
+                                      th:text="${it.statusText}">状态</span>
+                            </td>
+                            <td class="small muted"
+                                th:text="${#temporals.format(it.createTime, 'yyyy-MM-dd HH:mm')}">时间</td>
+                            <td>
+                                <!-- 待审核：通过 / 驳回 -->
+                                <div class="audit-cell" th:if="${it.status == 0}">
+                                    <form class="inline-form" th:action="@{/admin/items/{id}/audit(id=${it.id})}"
+                                          method="post">
+                                        <input type="hidden" name="pass" value="true"/>
+                                        <button class="btn btn-sm btn-primary" type="submit">通过</button>
+                                    </form>
+                                    <form class="inline-form" th:action="@{/admin/items/{id}/audit(id=${it.id})}"
+                                          method="post">
+                                        <input type="hidden" name="pass" value="false"/>
+                                        <input class="input" type="text" name="remark"
+                                               placeholder="驳回原因（必填）" required/>
+                                        <button class="btn btn-sm" type="submit">驳回</button>
+                                    </form>
+                                </div>
+                                <!-- 在售 / 交易中中：违规下架 -->
+                                <form th:if="${it.status == 1 or it.status == 5}" class="inline-form"
+                                      th:action="@{/admin/items/{id}/offline(id=${it.id})}" method="post">
+                                    <input class="input" type="text" name="reason"
+                                           placeholder="违规原因"/>
+                                    <button class="btn btn-sm" type="submit"
+                                            th:data-confirm="'确认下架该物品？'">下架</button>
+                                </form>
+                                <span class="small muted" th:if="${it.status != 0 and it.status != 1 and it.status != 5}">—</span>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(page.records)}">
+                            <td colspan="10" class="muted text-center">没有符合条件的物品</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div th:replace="~{fragments/common :: pager(${page})}"></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

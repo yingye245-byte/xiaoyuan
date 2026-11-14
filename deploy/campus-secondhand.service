@@ -1,0 +1,41 @@
+[Unit]
+Description=Campus Secondhand Platform (Spring Boot)
+Documentation=file:/opt/campus-secondhand/README.md
+After=network-online.target mysqld.service redis.service rabbitmq-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=campus
+Group=campus
+WorkingDirectory=/opt/campus-secondhand
+
+# 生产环境变量（数据库密码、Redis、RabbitMQ、上传目录等）全部放在 .env，不写进仓库
+EnvironmentFile=/opt/campus-secondhand/.env
+Environment=SPRING_PROFILES_ACTIVE=prod
+Environment=TZ=Asia/Shanghai
+
+ExecStart=/usr/lib/jvm/jdk-17/bin/java \
+    -Xms256m -Xmx512m \
+    -XX:+UseG1GC \
+    -Dfile.encoding=UTF-8 \
+    -Duser.timezone=Asia/Shanghai \
+    -jar /opt/campus-secondhand/campus-secondhand.jar
+
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# 日志统一由 logback 写入 LOG_PATH，journald 只保留启动与崩溃信息
+StandardOutput=journal
+StandardError=journal
+
+# 基础加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/campus-secondhand /data/campus-secondhand
+
+[Install]
+WantedBy=multi-user.target

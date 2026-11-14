@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>405 - 请求方式不被支持</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-sub">405</div>
+        <h2>请求方式不正确</h2>
+        <p class="muted mt-8">
+            该地址只接受指定方式的请求。请从页面上的按钮重新操作，不要直接修改地址访问。
+        </p>
+        <div class="mt-16">
+            <a class="btn btn-primary" th:href="@{/}">返回首页</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

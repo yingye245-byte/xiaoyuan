@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('菜单管理')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('菜单管理')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="card">
+                <div class="flex-between">
+                    <div class="card-title">菜单与权限标识</div>
+                    <span class="small muted">目录 → 菜单 → 按钮三级结构，登录时按角色装配到侧边栏</span>
+                </div>
+
+                <div class="menu-tree mt-16">
+                    <div class="node" th:each="m : ${menuTree}">
+                        <b th:text="${m.name}">目录</b>
+                        <span class="tag tag-gray" th:text="${m.type == 0} ? '目录' : '菜单'">目录</span>
+                        <span class="perms" th:if="${m.perms != null}" th:text="${m.perms}">perm</span>
+                        <span class="small muted" th:if="${m.path != null}" th:text="${m.path}">/path</span>
+                    </div>
+
+                    <!-- 二级 -->
+                    <div th:each="m : ${menuTree}">
+                        <div class="node child" th:each="c : ${m.children}">
+                            <b th:text="${c.name}">菜单</b>
+                            <span class="tag tag-gray" th:text="${c.type == 0} ? '目录' : '菜单'">菜单</span>
+                            <span class="perms" th:if="${c.perms != null}" th:text="${c.perms}">perm</span>
+                            <span class="small muted" th:if="${c.path != null}" th:text="${c.path}">/path</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-tip mt-16">
+                    菜单级权限：「用户管理」「物品审核」「分类管理」「订单管理」「留言管理」按角色动态下发，
+                    普通用户即使直接输入后台地址也会被 Spring Security 拦截并跳转 403；
+                    接口级权限：后台接口统一挂在 <code>/admin/**</code> 下，另有 <code>@PreAuthorize("hasRole('ADMIN')")</code> 兜底。
+                </div>
+            </div>
+
+            <!-- 完整菜单表，方便答辩时对照数据库 -->
+            <div class="card mt-16">
+                <div class="card-title">全部菜单数据（tb_menu）</div>
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:70px">ID</th>
+                            <th style="width:90px">父级</th>
+                            <th style="width:150px">名称</th>
+                            <th style="width:220px">路径</th>
+                            <th style="width:170px">权限标识</th>
+                            <th style="width:100px">类型</th>
+                            <th style="width:80px">排序</th>
+                            <th style="width:80px">可见</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="m : ${allMenus}">
+                            <td th:text="${m.id}">1</td>
+                            <td th:text="${m.parentId}">0</td>
+                            <td th:text="${m.name}">名称</td>
+                            <td class="small" th:text="${m.path}">路径</td>
+                            <td class="small" th:text="${m.perms}">权限</td>
+                            <td>
+                                <span class="tag tag-gray"
+                                      th:text="${m.type == 0} ? '目录' : (${m.type == 1} ? '菜单' : '按钮')">目录</span>
+                            </td>
+                            <td th:text="${m.sort}">0</td>
+                            <td>
+                                <span class="tag" th:classappend="${m.visible == 1} ? 'tag-green' : 'tag-red'"
+                                      th:text="${m.visible == 1} ? '显示' : '隐藏'">显示</span>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

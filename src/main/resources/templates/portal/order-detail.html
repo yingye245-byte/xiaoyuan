@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('订单详情')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('orders')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container" style="max-width:860px">
+
+    <div class="section-head mt-16">
+        <h2>订单详情</h2>
+        <a class="small" th:href="@{/orders/mine}">返回我的订单</a>
+    </div>
+
+    <div class="card">
+        <div class="flex-between">
+            <div>
+                <div class="small muted">订单号</div>
+                <div class="fw-600" th:text="${order.orderNo}">SC20240101000000001</div>
+            </div>
+            <div>
+                <span class="tag"
+                      th:classappend="${order.status == 0} ? 'tag-orange' : (${order.status == 2} ? 'tag-green' : (${order.status == 3} ? 'tag-red' : ''))"
+                      th:text="${order.statusText}">状态</span>
+            </div>
+        </div>
+
+        <!-- 状态进度 -->
+        <div class="status-steps">
+            <div class="status-step" th:classappend="${order.status >= 0} ? 'done' : ''">提交订单</div>
+            <div class="status-step"
+                 th:classappend="${order.status == 3} ? 'canceled' : (${order.status >= 1} ? 'done' : '')"
+                 th:text="${order.status == 3} ? '已取消' : '买家支付'">买家支付</div>
+            <div class="status-step"
+                 th:classappend="${order.status == 3} ? 'canceled' : (${order.status == 2} ? 'done' : '')"
+                 th:text="${order.status == 3} ? '交易关闭' : '确认完成'">确认完成</div>
+        </div>
+
+        <div class="flash flash-error mt-16"
+             th:if="${order.status == 3 and order.cancelReason != null}"
+             th:text="'关闭原因：' + ${order.cancelReason}">关闭原因</div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:20px 0"/>
+
+        <div class="flex gap-16">
+            <img th:src="${order.itemCover}" alt="封面"
+                 style="width:110px;height:110px;border-radius:10px;object-fit:cover"/>
+            <div style="flex:1">
+                <a class="fw-600" th:href="@{'/item/' + ${order.itemId}}" th:text="${order.itemTitle}">物品标题</a>
+                <div class="small muted mt-8" th:text="'卖家：' + ${order.sellerName}">卖家</div>
+                <div class="small muted" th:text="'买家：' + ${order.buyerName}">买家</div>
+                <div class="mt-8">
+                    <span class="price" th:text="'¥' + ${#numbers.formatDecimal(order.amount, 1, 2)}">¥0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-list mt-16">
+            <div class="info-row">
+                <span class="k">下单时间</span>
+                <span th:text="${#temporals.format(order.createTime, 'yyyy-MM-dd HH:mm:ss')}">时间</span>
+            </div>
+            <div class="info-row" th:if="${order.payTime != null}">
+                <span class="k">支付时间</span>
+                <span th:text="${#temporals.format(order.payTime, 'yyyy-MM-dd HH:mm:ss')}">时间</span>
+            </div>
+            <div class="info-row" th:if="${order.finishTime != null}">
+                <span class="k">完成时间</span>
+                <span th:text="${#temporals.format(order.finishTime, 'yyyy-MM-dd HH:mm:ss')}">时间</span>
+            </div>
+        </div>
+
+        <!-- 待支付倒计时提示 -->
+        <div class="flash flash-error" th:if="${order.status == 0}"
+             th:attr="data-created=${#temporals.format(order.createTime, 'yyyy-MM-dd''T''HH:mm:ss')}"
+             id="payCountdown">
+            请在 30 分钟内完成支付，超时订单将被系统自动关闭
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="flex gap-12 mt-16" th:if="${order.status == 0}">
+            <form th:action="@{'/order/' + ${order.id} + '/pay'}" method="post"
+                  th:if="${isBuyer}">
+                <button class="btn btn-accent btn-lg" type="submit" data-confirm="确认已完成线下支付？">确认支付</button>
+            </form>
+            <form th:action="@{'/order/' + ${order.id} + '/cancel'}" method="post"
+                  th:if="${isBuyer}">
+                <button class="btn btn-lg" type="submit" data-confirm="取消后物品会重新上架，确定取消订单？">取消订单</button>
+            </form>
+            <span class="small muted" th:if="${!isBuyer}">等待买家支付</span>
+        </div>
+
+        <div class="flex gap-12 mt-16" th:if="${order.status == 1}">
+            <form th:action="@{'/order/' + ${order.id} + '/confirm'}" method="post"
+                  th:if="${isBuyer}">
+                <button class="btn btn-primary btn-lg" type="submit" data-confirm="确认已收到物品？确认后交易完成">确认收货</button>
+            </form>
+            <span class="small muted" th:if="${!isBuyer}">已支付，等待买家确认完成，请尽快约定面交</span>
+        </div>
+
+        <div class="mt-16 small muted" th:if="${order.status == 2}">交易已完成，感谢使用校园二手平台 🎉</div>
+        <div class="mt-16 small muted" th:if="${order.status == 3}">订单已关闭，物品已重新上架（若为超时关闭则由系统自动处理）</div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+<script>
+    // 待支付倒计时（前端展示，真正的关单由后端 RabbitMQ 延迟消息 + 定时任务兜底完成）
+    (function () {
+        var box = document.getElementById('payCountdown');
+        if (!box) {
+            return;
+        }
+        var created = box.getAttribute('data-created');
+        if (!created) {
+            return;
+        }
+        var deadline = new Date(created.replace(/-/g, '/')).getTime() + 30 * 60 * 1000;
+        function tick() {
+            var left = deadline - Date.now();
+            if (left <= 0) {
+                box.textContent = '支付时间已到，订单即将被系统自动关闭';
+                return;
+            }
+            var m = Math.floor(left / 60000);
+            var s = Math.floor((left % 60000) / 1000);
+            box.textContent = '请在 ' + m + ' 分 ' + s + ' 秒内完成支付，超时订单将被系统自动关闭';
+            setTimeout(tick, 1000);
+        }
+        tick();
+    })();
+</script>
+</body>
+</html>

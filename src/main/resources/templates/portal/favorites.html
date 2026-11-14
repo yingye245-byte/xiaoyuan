@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('我的收藏')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+
+    <div class="section-head mt-16">
+        <h2>我的收藏</h2>
+        <div class="flex gap-8">
+            <a class="btn btn-sm" th:href="@{/user/profile}">个人中心</a>
+            <a class="btn btn-sm" th:href="@{/cart}">购物车</a>
+        </div>
+    </div>
+
+    <div class="grid grid-4" th:if="${!#lists.isEmpty(favorites)}">
+        <div class="item-card" th:each="f : ${favorites}">
+            <a class="thumb" th:href="@{'/item/' + ${f.itemId}}">
+                <img th:src="${f.itemCover}" th:alt="${f.itemTitle}"/>
+            </a>
+            <div class="body">
+                <a class="title" th:href="@{'/item/' + ${f.itemId}}" th:text="${f.itemTitle}">标题</a>
+                <div class="tag-row">
+                    <span class="tag" th:classappend="${f.itemStatus == 1} ? 'tag-green' : 'tag-gray'"
+                          th:text="${f.itemStatus == 1} ? '在售' : '已不可购买'">在售</span>
+                </div>
+                <div class="meta">
+                    <span class="price" th:text="'¥' + ${#numbers.formatDecimal(f.itemPrice, 1, 2)}">¥0</span>
+                    <form th:action="@{'/favorite/' + ${f.itemId}}" method="post">
+                        <button class="btn btn-sm btn-ghost" type="submit" data-confirm="确定取消收藏？">取消收藏</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <th:block th:if="${#lists.isEmpty(favorites)}"><div th:replace="~{fragments/common :: empty('还没有收藏任何物品，去市场逛逛吧')}"></div></th:block>
+
+    <div class="mt-16 mb-16 text-center">
+        <a class="btn" th:href="@{/items}">去逛市场</a>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

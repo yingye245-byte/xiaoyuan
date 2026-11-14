@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/common :: head('首页')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('index')}"></header>
+
+<!-- ================= 顶部搜索区 ================= -->
+<section class="hero">
+    <div class="container">
+        <h1>让闲置物品在校园里继续发光</h1>
+        <p>教材、数码、生活用品、运动器材 —— 同校交易，当面验收，省钱又安心</p>
+
+        <form class="search-bar" th:action="@{/items}" method="get">
+            <input type="text" name="keyword" placeholder="搜索物品名称或描述，例如：高数教材、机械键盘"/>
+            <button class="btn btn-primary btn-lg" type="submit">搜 索</button>
+        </form>
+
+        <div class="hero-stats">
+            <div>
+                <div class="num" th:text="${overview != null ? overview.onSaleCount : 0}">0</div>
+                <div class="lbl">在售闲置</div>
+            </div>
+            <div>
+                <div class="num" th:text="${overview != null ? overview.userCount : 0}">0</div>
+                <div class="lbl">注册同学</div>
+            </div>
+            <div>
+                <div class="num" th:text="${overview != null ? overview.finishCount : 0}">0</div>
+                <div class="lbl">累计成交</div>
+            </div>
+            <div>
+                <div class="num" th:text="'¥' + ${overview != null ? #numbers.formatDecimal(overview.tradeAmount, 1, 0) : 0}">¥0</div>
+                <div class="lbl">交易金额</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+
+    <!-- ================= 分类导航 ================= -->
+    <div class="section">
+        <div class="section-head">
+            <h2>逛分类</h2>
+            <a class="small" th:href="@{/items}">查看全部 →</a>
+        </div>
+        <div class="category-strip">
+            <a class="category-chip" th:each="c : ${categories}"
+               th:href="@{/items(categoryId=${c.id})}">
+                <span th:text="${c.icon}">📦</span>
+                <span th:text="${c.name}">分类</span>
+                <span class="small muted" th:text="'(' + ${c.itemCount} + ')'">(0)</span>
+            </a>
+            <a class="category-chip" th:if="${#lists.isEmpty(categories)}" th:href="@{/items}">
+                暂无分类，先去看看全部闲置
+            </a>
+        </div>
+    </div>
+
+    <!-- ================= 热门物品 ================= -->
+    <div class="section">
+        <div class="section-head">
+            <h2>🔥 热门闲置</h2>
+            <a class="small" th:href="@{/items(sort='hot')}">更多热门 →</a>
+        </div>
+        <div class="grid grid-4" th:if="${!#lists.isEmpty(hotItems)}">
+            <div th:each="item : ${hotItems}">
+                <div th:replace="~{fragments/common :: itemCard(${item})}"></div>
+            </div>
+        </div>
+        <th:block th:if="${#lists.isEmpty(hotItems)}"><div th:replace="~{fragments/common :: empty('还没有人发布闲置，快去发布第一件吧')}"></div></th:block>
+    </div>
+
+    <!-- ================= 最新发布 ================= -->
+    <div class="section">
+        <div class="section-head">
+            <h2>🆕 最新发布</h2>
+            <a class="small" th:href="@{/items}">全部闲置 →</a>
+        </div>
+        <div class="grid grid-4" th:if="${!#lists.isEmpty(latestItems)}">
+            <div th:each="item : ${latestItems}">
+                <div th:replace="~{fragments/common :: itemCard(${item})}"></div>
+            </div>
+        </div>
+        <th:block th:if="${#lists.isEmpty(latestItems)}"><div th:replace="~{fragments/common :: empty('暂无最新发布')}"></div></th:block>
+    </div>
+
+    <!-- ================= 引导条 ================= -->
+    <div class="card mt-24 mb-16" sec:authorize="!isAuthenticated()">
+        <div class="flex-between">
+            <div>
+                <div class="fw-600">想卖掉宿舍里堆着的旧物？</div>
+                <div class="small muted mt-8">注册后即可发布闲置，审核通过自动上架，全程免费</div>
+            </div>
+            <div class="flex gap-8">
+                <a class="btn" th:href="@{/login}">登录</a>
+                <a class="btn btn-primary" th:href="@{/register}">免费注册</a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

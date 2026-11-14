@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/common :: head(${item.title})}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('items')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+
+    <!-- 面包屑 -->
+    <div class="small muted mt-16 mb-8">
+        <a th:href="@{/}">首页</a> /
+        <a th:href="@{/items}">闲置市场</a>
+        <span th:if="${item.categoryName != null}"
+              th:text="' / ' + ${item.categoryName}"> / 分类</span>
+        <span th:text="' / ' + ${item.title}"> / 标题</span>
+    </div>
+
+    <div class="detail-layout">
+
+        <!-- ================= 左侧：图片 ================= -->
+        <div class="card">
+            <div class="gallery-main">
+                <img th:src="${item.coverImg}" th:alt="${item.title}" id="mainImage"/>
+            </div>
+            <div class="gallery-thumbs" th:if="${!#lists.isEmpty(item.images)}">
+                <a href="javascript:void(0)" th:each="img : ${item.images}"
+                   th:data-large="${img.url}">
+                    <img th:src="${img.url}" alt="物品图片" style="width:76px;height:76px"/>
+                </a>
+            </div>
+            <div class="mt-16">
+                <div class="fw-600 mb-8">物品描述</div>
+                <div class="muted" style="white-space:pre-wrap" th:text="${item.description}">描述</div>
+            </div>
+            <div class="small muted mt-16"
+                 th:text="'浏览 ' + ${item.viewCount} + ' 次 · 收藏 ' + ${item.favoriteCount} + ' 次'">
+                浏览 0 次
+            </div>
+        </div>
+
+        <!-- ================= 右侧：信息与操作 ================= -->
+        <div>
+            <div class="card">
+                <div class="tag-row mb-8">
+                    <span class="tag" th:if="${item.categoryName != null}" th:text="${item.categoryName}">分类</span>
+                    <span class="tag tag-gray" th:if="${item.conditionText != null}" th:text="${item.conditionText}">成色</span>
+                    <span class="tag" th:classappend="${item.status == 1} ? 'tag-green' : (${item.status == 0} ? 'tag-orange' : 'tag-red')"
+                          th:text="${item.statusText}">在售</span>
+                </div>
+
+                <h1 style="font-size:22px;margin:0 0 10px" th:text="${item.title}">物品标题</h1>
+
+                <div class="mb-16">
+                    <span class="price price-lg" th:text="'¥' + ${#numbers.formatDecimal(item.price, 1, 2)}">¥0.00</span>
+                    <span class="price-origin" th:if="${item.originalPrice != null and item.originalPrice > 0}"
+                          th:text="'原价 ¥' + ${#numbers.formatDecimal(item.originalPrice, 1, 2)}">原价</span>
+                </div>
+
+                <div class="info-list">
+                    <div class="info-row">
+                        <span class="k">交易校区</span>
+                        <span th:text="${item.campus} ?: '校内面交'">校区</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="k">发布时间</span>
+                        <span th:text="${#temporals.format(item.createTime, 'yyyy-MM-dd HH:mm')}">时间</span>
+                    </div>
+                    <div class="info-row" th:if="${item.status == 4 and item.auditRemark != null}">
+                        <span class="k">驳回原因</span>
+                        <span class="price" th:text="${item.auditRemark}">原因</span>
+                    </div>
+                </div>
+
+                <!-- 卖家信息 -->
+                <div class="seller-box mb-16">
+                    <img th:src="${item.sellerAvatar}" alt="卖家头像"/>
+                    <div>
+                        <div class="fw-600" th:text="${item.sellerName}">卖家</div>
+                        <div class="small muted">卖家 · 物品编号 #<span th:text="${item.id}">0</span></div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div th:if="${item.status == 1 and currentUserId != null and currentUserId != item.sellerId}"
+                     class="flex gap-8">
+                    <form th:action="@{/order/create}" method="get" style="flex:1">
+                        <input type="hidden" name="itemId" th:value="${item.id}"/>
+                        <button class="btn btn-accent btn-lg btn-block" type="submit">立即购买</button>
+                    </form>
+                    <form th:action="@{/cart/add}" method="post" style="flex:1">
+                        <input type="hidden" name="itemId" th:value="${item.id}"/>
+                        <button class="btn btn-lg btn-block" type="submit">加入购物车</button>
+                    </form>
+                </div>
+
+                <div th:if="${item.status == 1 and currentUserId == null}" class="flex gap-8">
+                    <a class="btn btn-accent btn-lg btn-block" th:href="@{/login}">登录后购买</a>
+                </div>
+
+                <div th:if="${currentUserId != null and currentUserId == item.sellerId}" class="flex gap-8">
+                    <a class="btn btn-primary" th:href="@{'/items/' + ${item.id} + '/edit'}">编辑物品</a>
+                    <form th:action="@{'/items/' + ${item.id} + '/offline'}" method="post" th:if="${item.status == 1}">
+                        <button class="btn" type="submit" data-confirm="确定下架该物品吗？">下架</button>
+                    </form>
+                    <span class="small muted" th:if="${item.status == 5}">该物品正在交易中，暂不可编辑</span>
+                </div>
+
+                <div th:if="${item.status != 1 and item.status != 5}" class="small muted mt-16">
+                    该物品当前状态为「<span th:text="${item.statusText}">状态</span>」，暂不可购买
+                </div>
+
+                <!-- 收藏 -->
+                <div class="mt-16" th:if="${currentUserId != null}">
+                    <form th:action="@{'/favorite/' + ${item.id}}" method="post">
+                        <button class="btn btn-block" type="submit"
+                                th:text="${item.favorited} ? '♥ 已收藏（点击取消）' : '♡ 收藏该物品'">
+                            收藏
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 猜你喜欢：来自浏览记录 -->
+            <div class="card mt-16" th:if="${!#lists.isEmpty(recentItems)}">
+                <div class="card-title">你最近看过的</div>
+                <div class="grid grid-2 gap-12">
+                    <a class="flex gap-8" th:each="r : ${recentItems}" th:href="@{'/item/' + ${r.id}}">
+                        <img th:src="${r.coverImg}" style="width:56px;height:56px;border-radius:8px;object-fit:cover"/>
+                        <div>
+                            <div class="small" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                                 th:text="${r.title}">标题</div>
+                            <div class="price small" th:text="'¥' + ${#numbers.formatDecimal(r.price, 1, 2)}">¥0</div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 留言区 ================= -->
+    <div class="card mt-24" id="comments">
+        <div class="card-title">
+            <span>留言咨询（<span th:text="${#lists.size(comments)}">0</span>）</span>
+            <span class="small muted">请勿在留言中透露手机号等隐私信息</span>
+        </div>
+
+        <!-- 发表留言 -->
+        <div th:if="${currentUserId != null}">
+            <form th:action="@{/comment}" method="post">
+                <input type="hidden" name="itemId" th:value="${item.id}"/>
+                <textarea class="textarea" name="content" rows="3" maxlength="500"
+                          placeholder="想问什么？例如：还在吗？可以便宜点吗？" required></textarea>
+                <div class="text-right mt-8">
+                    <button class="btn btn-primary" type="submit">发表留言</button>
+                </div>
+            </form>
+        </div>
+        <div th:if="${currentUserId == null}" class="muted">
+            <a th:href="@{/login}">登录</a> 后可以留言咨询卖家
+        </div>
+
+        <div class="mt-16" th:if="${!#lists.isEmpty(comments)}">
+            <div class="comment" th:each="c : ${comments}">
+                <div class="comment-head">
+                    <img th:src="${c.userAvatar}" alt="头像"/>
+                    <span class="name" th:text="${c.userNickname}">用户</span>
+                    <span class="small muted" th:text="${#temporals.format(c.createTime, 'MM-dd HH:mm')}">时间</span>
+                </div>
+                <div class="comment-body" th:text="${c.content}">留言内容</div>
+
+                <!-- 回复列表 -->
+                <div class="comment-replies" th:if="${!#lists.isEmpty(c.replies)}">
+                    <div th:each="r : ${c.replies}">
+                        <div class="comment-head">
+                            <img th:src="${r.userAvatar}" alt="头像" style="width:24px;height:24px"/>
+                            <span class="name" th:text="${r.userNickname}">用户</span>
+                            <span class="small muted">回复</span>
+                            <span class="small muted" th:text="${#temporals.format(r.createTime, 'MM-dd HH:mm')}">时间</span>
+                        </div>
+                        <div class="comment-body small" th:text="${r.content}">回复内容</div>
+                        <div class="comment-actions" th:if="${currentUserId != null and currentUserId == r.userId}">
+                            <form th:action="@{'/comment/' + ${r.id} + '/delete'}" method="post"
+                                  th:if="${currentUserId == r.userId}">
+                                <input type="hidden" name="itemId" th:value="${item.id}"/>
+                                <button class="btn btn-sm btn-ghost" type="submit" data-confirm="确认删除这条回复？">删除</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 回复表单 -->
+                <div class="comment-actions" th:if="${currentUserId != null}">
+                    <details>
+                        <summary class="small" style="cursor:pointer">回复</summary>
+                        <form th:action="@{/comment}" method="post" class="mt-8 flex gap-8">
+                            <input type="hidden" name="itemId" th:value="${item.id}"/>
+                            <input type="hidden" name="parentId" th:value="${c.id}"/>
+                            <input class="input" type="text" name="content" maxlength="500"
+                                   placeholder="回复这条留言" required/>
+                            <button class="btn btn-sm btn-primary" type="submit">发送</button>
+                        </form>
+                    </details>
+                    <form th:action="@{'/comment/' + ${c.id} + '/delete'}" method="post"
+                          th:if="${currentUserId == c.userId}">
+                        <input type="hidden" name="itemId" th:value="${item.id}"/>
+                        <button class="btn btn-sm btn-ghost" type="submit" data-confirm="确认删除这条留言？">删除</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <th:block th:if="${#lists.isEmpty(comments)}"><div th:replace="~{fragments/common :: empty('还没有人留言，来问第一句吧')}"></div></th:block>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

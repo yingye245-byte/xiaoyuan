@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('角色管理')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('角色管理')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="card">
+                <div class="flex-between">
+                    <div class="card-title">系统角色（只读）</div>
+                    <span class="small muted">角色与菜单的授权关系由 tb_role_menu 维护，用户分配角色见「用户管理」</span>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:70px">ID</th>
+                            <th style="width:190px">角色编码</th>
+                            <th style="width:150px">角色名称</th>
+                            <th>说明</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="r : ${roles}">
+                            <td th:text="${r.id}">1</td>
+                            <td><code th:text="${r.code}">ROLE_USER</code></td>
+                            <td th:text="${r.name}">普通用户</td>
+                            <td class="small muted" th:text="${r.remark}">说明</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="form-tip mt-16">
+                    当前采用「三级角色 + 菜单级/接口级权限」：普通用户（ROLE_USER）可浏览、收藏、下单；
+                    卖家（ROLE_SELLER）可发布与维护物品；管理员（ROLE_ADMIN）拥有审核、下架、用户与分类管理权限。
+                    接口级鉴权由 Spring Security 的 <code>@PreAuthorize</code> 与请求路径规则共同完成。
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>404 - 页面不存在</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-sub">404</div>
+        <h2>页面走丢了</h2>
+        <p class="muted mt-8">
+            你访问的物品或页面可能已被卖家下架、删除，或者地址输入有误。
+        </p>
+        <div class="mt-16">
+            <a class="btn btn-primary" th:href="@{/}">返回首页</a>
+            <a class="btn" th:href="@{/items}">去逛逛二手集市</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

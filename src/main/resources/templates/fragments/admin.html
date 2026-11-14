@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<!--
+  后台公共片段：head / sidebar / topbar / flash
+  后台与前台样式分离（app.css 管前台，admin.css 管后台）
+  菜单由数据库 tb_menu 动态下发（角色-菜单关联），实现菜单级权限控制
+-->
+<head th:fragment="head(title)">
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title th:text="${title} + ' - 后台管理'">后台管理</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}"/>
+    <link rel="stylesheet" th:href="@{/css/admin.css}"/>
+</head>
+
+<body>
+
+<!-- ================= 左侧菜单 ================= -->
+<aside th:fragment="sidebar(menus, active)" class="admin-sidebar">
+    <div class="admin-brand">
+        <span class="logo-badge">校</span>
+        <div>
+            <div class="admin-brand-name">校园二手</div>
+            <div class="admin-brand-sub">管理后台</div>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <a class="admin-nav-item" th:href="@{/admin/dashboard}"
+           th:classappend="${active == 'dashboard'} ? 'active' : ''">数据看板</a>
+
+        <!-- 目录型菜单：把子菜单渲染出来（只渲染后台路径，避免把前台菜单混进后台） -->
+        <div th:each="m : ${menus}">
+            <div th:if="${m.path == null}">
+                <div class="admin-nav-group" th:text="${m.name}">分组</div>
+                <a class="admin-nav-item" th:each="c : ${m.children}"
+                   th:if="${c.path != null and #strings.startsWith(c.path, '/admin')}"
+                   th:href="@{${c.path}}"
+                   th:classappend="${#strings.endsWith(c.path, '/' + active)} ? 'active' : ''">
+                    <span th:text="${c.name}">菜单</span>
+                </a>
+            </div>
+            <a class="admin-nav-item"
+               th:if="${m.path != null and #strings.startsWith(m.path, '/admin') and m.path != '/admin/dashboard'}"
+               th:href="@{${m.path}}"
+               th:classappend="${#strings.endsWith(m.path, '/' + active)} ? 'active' : ''">
+                <span th:text="${m.name}">菜单</span>
+            </a>
+        </div>
+
+        <div class="admin-nav-group">日志与权限</div>
+        <a class="admin-nav-item" th:href="@{/admin/items/audits}"
+           th:classappend="${active == 'audits'} ? 'active' : ''">审核记录</a>
+        <a class="admin-nav-item" th:href="@{/admin/mail-logs}"
+           th:classappend="${active == 'mailLogs'} ? 'active' : ''">邮件日志</a>
+    </nav>
+
+    <div class="admin-sidebar-footer">
+        <a th:href="@{/}">← 返回前台商城</a>
+    </div>
+</aside>
+
+<!-- ================= 顶部条 ================= -->
+<header th:fragment="topbar(title)" class="admin-topbar">
+    <div class="admin-topbar-title" th:text="${title}">页面标题</div>
+    <div class="flex-center gap-12">
+        <span class="small muted">管理员：<span
+                th:text="${#authentication.principal.nickname}">管理员</span></span>
+        <img th:src="${#authentication.principal.avatar} ?: '/img/default-avatar.svg'" alt="头像"
+             style="width:30px;height:30px;border-radius:50%;object-fit:cover"/>
+        <form th:action="@{/logout}" method="post">
+            <button class="btn btn-sm" type="submit">退出</button>
+        </form>
+    </div>
+</header>
+
+<!-- ================= 提示条 ================= -->
+<div th:fragment="flash">
+    <div class="flash flash-success" th:if="${msg != null}" th:text="${msg}">操作成功</div>
+    <div class="flash flash-error" th:if="${error != null}" th:text="${error}">操作失败</div>
+</div>
+
+</body>
+</html>

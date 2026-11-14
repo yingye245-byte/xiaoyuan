@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('个人资料')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+    <div class="section-head mt-16">
+        <h2>个人中心</h2>
+        <div class="flex gap-8">
+            <a class="btn btn-sm" th:href="@{/user/favorites}">我的收藏</a>
+            <a class="btn btn-sm" th:href="@{/user/history}">浏览记录</a>
+            <a class="btn btn-sm" th:href="@{/user/messages}">我的消息</a>
+            <a class="btn btn-sm" th:href="@{/user/password}">修改密码</a>
+        </div>
+    </div>
+
+    <div class="grid grid-2" style="grid-template-columns:320px 1fr">
+
+        <!-- 头像与基本信息 -->
+        <div class="card" style="align-self:start">
+            <div class="text-center">
+                <img th:src="${user.avatar} ?: '/img/default-avatar.svg'" alt="头像"
+                     style="width:96px;height:96px;border-radius:50%;margin:0 auto 12px;object-fit:cover"/>
+                <div class="fw-600" style="font-size:16px" th:text="${user.nickname}">昵称</div>
+                <div class="small muted" th:text="'@' + ${user.username}">@username</div>
+                <div class="tag-row mt-8" style="justify-content:center">
+                    <span class="tag" th:if="${user.roleNames != null}" th:text="${user.roleNames}">角色</span>
+                    <span class="tag tag-green" th:if="${user.status == 1}">账号正常</span>
+                    <span class="tag tag-red" th:if="${user.status != 1}">账号已禁用</span>
+                </div>
+            </div>
+
+            <form class="mt-16" th:action="@{/user/avatar}" method="post" enctype="multipart/form-data">
+                <label class="form-label small">更换头像（jpg/png，≤2MB）</label>
+                <input class="input" type="file" name="file" accept="image/*" required/>
+                <button class="btn btn-sm btn-primary btn-block mt-8" type="submit">上传头像</button>
+            </form>
+
+            <div class="info-list mt-16">
+                <div class="info-row"><span class="k">学号</span><span th:text="${user.studentNo} ?: '未填写'">-</span></div>
+                <div class="info-row"><span class="k">校区</span><span th:text="${user.campus} ?: '未填写'">-</span></div>
+                <div class="info-row"><span class="k">信用分</span><span th:text="${user.creditScore}">100</span></div>
+                <div class="info-row"><span class="k">注册时间</span>
+                    <span th:text="${#temporals.format(user.createTime, 'yyyy-MM-dd')}">-</span></div>
+            </div>
+        </div>
+
+        <!-- 资料编辑 -->
+        <div class="card">
+            <div class="card-title">编辑资料</div>
+            <div class="flash flash-error" th:if="${error != null}" th:text="${error}"></div>
+
+            <form th:action="@{/user/profile}" method="post" th:object="${profileDTO}">
+                <div class="form-item">
+                    <label class="form-label" for="nickname">昵称<span class="required">*</span></label>
+                    <input class="input" type="text" id="nickname" th:field="*{nickname}" maxlength="20"/>
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="email">邮箱<span class="required">*</span></label>
+                    <input class="input" type="email" id="email" th:field="*{email}"/>
+                    <div class="form-tip">交易通知邮件将发送到该邮箱</div>
+                </div>
+                <div class="grid grid-2 gap-12">
+                    <div class="form-item">
+                        <label class="form-label" for="phone">手机号</label>
+                        <input class="input" type="text" id="phone" th:field="*{phone}"/>
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="studentNo">学号</label>
+                        <input class="input" type="text" id="studentNo" th:field="*{studentNo}"/>
+                    </div>
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="campus">所在校区</label>
+                    <input class="input" type="text" id="campus" th:field="*{campus}"/>
+                </div>
+                <button class="btn btn-primary" type="submit">保存修改</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

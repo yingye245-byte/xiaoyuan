@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campus.secondhand.mapper.ItemMapper">
+
+    <sql id="itemColumns">
+        i.id, i.seller_id, i.category_id, i.title, i.description, i.price, i.original_price,
+        i.condition_level, i.cover_img, i.campus, i.status, i.audit_remark,
+        i.view_count, i.favorite_count, i.deleted, i.create_time, i.update_time
+    </sql>
+
+    <!-- 物品分页检索 -->
+    <select id="selectItemPage" resultType="com.campus.secondhand.entity.Item">
+        SELECT
+        <include refid="itemColumns"/>,
+        c.name AS category_name,
+        u.nickname AS seller_name,
+        u.avatar AS seller_avatar
+        FROM tb_item i
+        LEFT JOIN tb_category c ON c.id = i.category_id
+        LEFT JOIN tb_user u ON u.id = i.seller_id
+        WHERE i.deleted = 0
+        <if test="q.status != null">
+            AND i.status = #{q.status}
+        </if>
+        <if test="q.categoryId != null">
+            AND i.category_id = #{q.categoryId}
+        </if>
+        <if test="q.sellerId != null">
+            AND i.seller_id = #{q.sellerId}
+        </if>
+        <if test="q.keyword != null and q.keyword != ''">
+            AND (i.title LIKE CONCAT('%', #{q.keyword}, '%')
+            OR i.description LIKE CONCAT('%', #{q.keyword}, '%'))
+        </if>
+        <if test="q.minPrice != null">
+            AND i.price &gt;= #{q.minPrice}
+        </if>
+        <if test="q.maxPrice != null">
+            AND i.price &lt;= #{q.maxPrice}
+        </if>
+        <if test="q.campus != null and q.campus != ''">
+            AND i.campus = #{q.campus}
+        </if>
+        ORDER BY
+        <choose>
+            <when test="q.sort == 'priceAsc'">i.price ASC, i.create_time DESC</when>
+            <when test="q.sort == 'priceDesc'">i.price DESC, i.create_time DESC</when>
+            <when test="q.sort == 'hot'">i.view_count DESC, i.create_time DESC</when>
+            <otherwise>i.create_time DESC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 物品详情 -->
+    <select id="selectItemDetail" resultType="com.campus.secondhand.entity.Item">
+        SELECT
+        <include refid="itemColumns"/>,
+        c.name AS category_name,
+        u.nickname AS seller_name,
+        u.avatar AS seller_avatar
+        FROM tb_item i
+        LEFT JOIN tb_category c ON c.id = i.category_id
+        LEFT JOIN tb_user u ON u.id = i.seller_id
+        WHERE i.id = #{id} AND i.deleted = 0
+    </select>
+</mapper>

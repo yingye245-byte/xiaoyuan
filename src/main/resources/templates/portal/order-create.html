@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('确认下单')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('items')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container" style="max-width:780px">
+
+    <div class="section-head mt-16">
+        <h2>确认订单信息</h2>
+    </div>
+
+    <div class="card">
+        <div class="flex gap-16">
+            <img th:src="${item.coverImg}" alt="封面"
+                 style="width:130px;height:130px;border-radius:10px;object-fit:cover"/>
+            <div style="flex:1">
+                <div class="fw-600" style="font-size:16px" th:text="${item.title}">物品标题</div>
+                <div class="tag-row mt-8">
+                    <span class="tag" th:if="${item.categoryName != null}" th:text="${item.categoryName}">分类</span>
+                    <span class="tag tag-gray" th:if="${item.conditionText != null}" th:text="${item.conditionText}">成色</span>
+                </div>
+                <div class="mt-16">
+                    <span class="price price-lg" th:text="'¥' + ${#numbers.formatDecimal(item.price, 1, 2)}">¥0</span>
+                </div>
+                <div class="small muted mt-8" th:text="'卖家：' + ${item.sellerName} + ' · 交易校区：' + ${item.campus}">
+                    卖家
+                </div>
+            </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:20px 0"/>
+
+        <div class="info-list">
+            <div class="info-row"><span class="k">支付方式</span><span>校内面交现付（线下自行完成，平台记录交易状态）</span></div>
+            <div class="info-row"><span class="k">交付方式</span><span>与卖家约定时间地点面交</span></div>
+            <div class="info-row"><span class="k">重要提示</span>
+                <span class="price">下单后 30 分钟内未支付，订单将自动关闭，物品重新上架</span></div>
+        </div>
+
+        <form th:action="@{/order/create}" method="post" class="mt-16">
+            <input type="hidden" name="itemId" th:value="${item.id}"/>
+            <input type="hidden" name="token" th:value="${token}"/>
+            <button class="btn btn-accent btn-lg btn-block" type="submit">确认下单</button>
+        </form>
+        <div class="text-center mt-8">
+            <a class="small" th:href="@{'/item/' + ${item.id}}">← 返回物品详情</a>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

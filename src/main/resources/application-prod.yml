@@ -1,0 +1,73 @@
+# 生产环境：Linux + Nginx，全部通过环境变量注入，禁止明文密码
+server:
+  port: 8080
+  forward-headers-strategy: native
+  tomcat:
+    max-threads: 200
+    accept-count: 200
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:campus_secondhand}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USER:campus}
+    password: ${DB_PASSWORD}
+    hikari:
+      minimum-idle: 10
+      maximum-pool-size: 50
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: 0
+    timeout: 3000ms
+    lettuce:
+      pool:
+        max-active: 32
+        max-idle: 16
+        min-idle: 4
+  rabbitmq:
+    host: ${MQ_HOST:127.0.0.1}
+    port: ${MQ_PORT:5672}
+    username: ${MQ_USER:guest}
+    password: ${MQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+  thymeleaf:
+    cache: true
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+file:
+  upload-path: ${UPLOAD_PATH:/data/campus-upload/}
+
+app:
+  mail:
+    mock: ${MAIL_MOCK:false}
+
+mq:
+  order:
+    delay-ms: ${ORDER_DELAY_MS:1800000}
+
+logging:
+  level:
+    root: warn
+    com.campus.secondhand: info
+  file:
+    name: ${LOG_PATH:/var/log/campus-secondhand}/campus-secondhand.log

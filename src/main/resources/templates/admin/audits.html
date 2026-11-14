@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/admin :: head('审核记录')}"></head>
+<body>
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('审核记录')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="card">
+                <div class="flex-between">
+                    <div class="card-title">物品审核留痕</div>
+                    <span class="small muted">每次审核都会写库，可追溯审核人、结论与原因</span>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="data">
+                        <thead>
+                        <tr>
+                            <th style="width:80px">记录 ID</th>
+                            <th style="width:90px">物品 ID</th>
+                            <th>物品标题</th>
+                            <th style="width:130px">审核人</th>
+                            <th style="width:110px">审核结论</th>
+                            <th>备注</th>
+                            <th style="width:170px">审核时间</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="r : ${page.records}">
+                            <td th:text="${r.id}">1</td>
+                            <td>
+                                <a th:href="@{/item/{id}(id=${r.itemId})}" target="_blank"
+                                   th:text="${r.itemId}">1</a>
+                            </td>
+                            <td th:text="${r.itemTitle}">标题</td>
+                            <td class="small" th:text="${r.adminName}">管理员</td>
+                            <td>
+                                <span class="tag"
+                                      th:classappend="${r.result == 1} ? 'tag-green' : (${r.result == 2} ? 'tag-red' : 'tag-orange')"
+                                      th:text="${r.result == 1} ? '通过' : (${r.result == 2} ? '驳回' : '违规下架')">通过</span>
+                            </td>
+                            <td class="small muted" th:text="${r.remark != null ? r.remark : '—'}">备注</td>
+                            <td class="small muted"
+                                th:text="${#temporals.format(r.createTime, 'yyyy-MM-dd HH:mm')}">时间</td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(page.records)}">
+                            <td colspan="7" class="muted text-center">暂无审核记录</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div th:replace="~{fragments/common :: pager(${page})}"></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

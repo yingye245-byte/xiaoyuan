@@ -1,0 +1,34 @@
+# 构建产物
+target/
+*.jar
+!deploy/*.jar
+
+# 日志
+logs/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 运行期数据与临时文件
+docs/_shot_*.png
+docs/_edge-profile*
+docs/_run*.log
+docs/_*.html
+docs/smoke-*.ps1
+docs/dump.ps1
+upload/
+
+# 敏感配置
+.env
+deploy/.env
+application-local.yml

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('我的闲置')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('my-items')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container">
+
+    <div class="section-head mt-16">
+        <h2>我的闲置</h2>
+        <a class="btn btn-primary" th:href="@{/items/publish}">+ 发布新闲置</a>
+    </div>
+
+    <!-- 状态筛选 -->
+    <div class="category-strip mb-16">
+        <a class="category-chip" th:href="@{/my-items}"
+           th:classappend="${status == null} ? 'active' : ''">全部</a>
+        <a class="category-chip" th:href="@{/my-items(status=0)}"
+           th:classappend="${status != null and status == 0} ? 'active' : ''">待审核</a>
+        <a class="category-chip" th:href="@{/my-items(status=1)}"
+           th:classappend="${status != null and status == 1} ? 'active' : ''">在售中</a>
+        <a class="category-chip" th:href="@{/my-items(status=5)}"
+           th:classappend="${status != null and status == 5} ? 'active' : ''">交易中</a>
+        <a class="category-chip" th:href="@{/my-items(status=3)}"
+           th:classappend="${status != null and status == 3} ? 'active' : ''">已售出</a>
+        <a class="category-chip" th:href="@{/my-items(status=2)}"
+           th:classappend="${status != null and status == 2} ? 'active' : ''">已下架</a>
+        <a class="category-chip" th:href="@{/my-items(status=4)}"
+           th:classappend="${status != null and status == 4} ? 'active' : ''">审核驳回</a>
+    </div>
+
+    <div class="card" th:if="${!#lists.isEmpty(page.records)}">
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                <tr>
+                    <th style="width:70px">封面</th>
+                    <th>物品</th>
+                    <th style="width:110px">价格</th>
+                    <th style="width:100px">状态</th>
+                    <th style="width:150px">发布时间</th>
+                    <th style="width:230px">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="item : ${page.records}">
+                    <td><img class="cell-img" th:src="${item.coverImg}" alt="封面"/></td>
+                    <td>
+                        <a th:href="@{'/item/' + ${item.id}}" th:text="${item.title}">标题</a>
+                        <div class="small muted"
+                             th:text="'浏览 ' + ${item.viewCount} + ' · 收藏 ' + ${item.favoriteCount}">浏览</div>
+                    </td>
+                    <td class="price" th:text="'¥' + ${#numbers.formatDecimal(item.price, 1, 2)}">¥0</td>
+                    <td>
+                        <span class="tag"
+                              th:classappend="${item.status == 1} ? 'tag-green' : (${item.status == 0} ? 'tag-orange' : (${item.status == 4} ? 'tag-red' : 'tag-gray'))"
+                              th:text="${item.statusText}">状态</span>
+                        <div class="small muted" th:if="${item.status == 4 and item.auditRemark != null}"
+                             th:text="${item.auditRemark}">驳回原因</div>
+                    </td>
+                    <td class="small muted"
+                        th:text="${#temporals.format(item.createTime, 'yyyy-MM-dd HH:mm')}">时间</td>
+                    <td>
+                        <div class="actions">
+                            <a class="btn btn-sm" th:href="@{'/item/' + ${item.id}}">查看</a>
+                            <a class="btn btn-sm" th:if="${item.status != 3 and item.status != 5}"
+                               th:href="@{'/items/' + ${item.id} + '/edit'}">编辑</a>
+
+                            <form th:action="@{'/items/' + ${item.id} + '/offline'}" method="post"
+                                  th:if="${item.status == 1}">
+                                <button class="btn btn-sm" type="submit" data-confirm="确定下架？">下架</button>
+                            </form>
+
+                            <form th:action="@{'/items/' + ${item.id} + '/resubmit'}" method="post"
+                                  th:if="${item.status == 2 or item.status == 4}">
+                                <button class="btn btn-sm btn-primary" type="submit">重新上架</button>
+                            </form>
+
+                            <form th:action="@{'/items/' + ${item.id} + '/delete'}" method="post"
+                                  th:if="${item.status != 5 and item.status != 3}">
+                                <button class="btn btn-sm" type="submit" data-confirm="删除后不可恢复，确定删除？">删除</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <th:block th:if="${#lists.isEmpty(page.records)}"><div th:replace="~{fragments/common :: empty('这里还没有物品，去发布第一件闲置吧')}"></div></th:block>
+
+    <div th:replace="~{fragments/common :: pager(${page})}"></div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>
