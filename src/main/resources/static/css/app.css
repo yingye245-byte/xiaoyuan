@@ -669,6 +669,30 @@ img {
     border-bottom: none;
 }
 
+/* 我的消息：整条可点击，点击后标记已读并跳转关联订单/物品 */
+.msg-item {
+    padding: 14px 12px;
+    border-bottom: 1px dashed var(--line);
+    border-radius: 10px;
+    transition: background .18s;
+}
+
+.msg-item:last-child {
+    border-bottom: none;
+}
+
+.msg-item.msg-clickable {
+    cursor: pointer;
+}
+
+.msg-item.msg-clickable:hover {
+    background: #f5f8ff;
+}
+
+.msg-open-form {
+    display: none;
+}
+
 .comment-head {
     display: flex;
     align-items: center;

@@ -63,6 +63,28 @@ public class MessageService {
                 .eq(Message::getUserId, userId).eq(Message::getIsRead, 0).set(Message::getIsRead, 1));
     }
 
+    /**
+     * 点击某条消息：先标记为已读，再返回该消息关联的页面地址
+     * 订单类消息跳订单详情，物品/留言/审核类消息跳物品详情，其余回到消息列表
+     */
+    public String markReadAndGetTarget(Long id, Long userId) {
+        Message message = messageMapper.selectById(id);
+        if (message == null || !message.getUserId().equals(userId)) {
+            throw new BusinessException(403, "无权操作该消息");
+        }
+        if (message.getIsRead() == null || message.getIsRead() == 0) {
+            messageMapper.update(null, new LambdaUpdateWrapper<Message>()
+                    .eq(Message::getId, id).set(Message::getIsRead, 1));
+        }
+        if (message.getBizId() == null) {
+            return "/user/messages";
+        }
+        if ("ORDER".equalsIgnoreCase(message.getBizType())) {
+            return "/order/" + message.getBizId();
+        }
+        return "/item/" + message.getBizId();
+    }
+
     public void delete(Long id, Long userId) {
         Message message = messageMapper.selectById(id);
         if (message == null || !message.getUserId().equals(userId)) {

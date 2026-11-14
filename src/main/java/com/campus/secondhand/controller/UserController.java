@@ -124,6 +124,13 @@ public class UserController {
         return "redirect:/user/messages";
     }
 
+    /** 点击消息：标记已读后跳到消息关联的订单 / 物品页面 */
+    @PostMapping("/user/messages/{id}/open")
+    public String openMessage(@PathVariable Long id) {
+        String target = messageService.markReadAndGetTarget(id, SecurityUtils.getUserId());
+        return "redirect:" + target;
+    }
+
     @PostMapping("/user/messages/read-all")
     public String readAll(RedirectAttributes redirectAttributes) {
         messageService.markAllRead(SecurityUtils.getUserId());

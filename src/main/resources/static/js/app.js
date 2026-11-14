@@ -132,6 +132,37 @@
     }
 
     /**
+     * 我的消息：点击整条消息即提交到 /user/messages/{id}/open
+     * 后端会先把该消息标记为已读，再跳转到关联的订单 / 物品页面
+     */
+    function bindMessageOpen() {
+        document.querySelectorAll('.msg-item.msg-clickable').forEach(function (item) {
+            var form = item.querySelector('.msg-open-form');
+            if (!form) {
+                return;
+            }
+            item.addEventListener('click', function (e) {
+                var tag = (e.target.tagName || '').toLowerCase();
+                // 点在按钮、链接、输入框或它们内部时不触发跳转，避免和「标为已读」等按钮冲突
+                if (tag === 'button' || tag === 'a' || tag === 'input' || e.target.closest('button, a, input, form[method="post"]')) {
+                    return;
+                }
+                form.submit();
+            });
+        });
+
+        // 「查看订单 / 查看物品」按钮同样走「先标记已读、再跳转」的流程
+        document.querySelectorAll('[data-open-message]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var form = btn.closest('.msg-item') && btn.closest('.msg-item').querySelector('.msg-open-form');
+                if (form) {
+                    form.submit();
+                }
+            });
+        });
+    }
+
+    /**
      * 自动隐藏成功提示（3 秒），失败提示保留
      */
     function autoHideFlash() {
@@ -152,6 +183,7 @@
         bindGallery();
         bindUploadPreview();
         bindUploadLimit();
+        bindMessageOpen();
         autoHideFlash();
     });
 })();

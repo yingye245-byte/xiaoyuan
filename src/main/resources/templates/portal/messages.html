@@ -18,7 +18,10 @@
     </div>
 
     <div class="card" th:if="${!#lists.isEmpty(page.records)}">
-        <div th:each="m : ${page.records}" class="comment">
+        <div th:each="m : ${page.records}" class="msg-item" th:classappend="${m.bizId != null} ? 'msg-clickable' : ''">
+            <!-- 点击消息：提交到 /open，后端标记已读后跳转关联的订单或物品 -->
+            <form class="msg-open-form" th:if="${m.bizId != null}"
+                  th:action="@{'/user/messages/' + ${m.id} + '/open'}" method="post"></form>
             <div class="flex-between">
                 <div class="flex-center gap-8">
                     <span class="tag tag-red" th:if="${m.isRead == 0}">未读</span>
@@ -33,10 +36,10 @@
                 <form th:action="@{'/user/messages/' + ${m.id} + '/read'}" method="post" th:if="${m.isRead == 0}">
                     <button class="btn btn-sm btn-ghost" type="submit">标为已读</button>
                 </form>
-                <a class="btn btn-sm btn-ghost" th:if="${m.bizType == 'ORDER' and m.bizId != null}"
-                   th:href="@{'/order/' + ${m.bizId}}">查看订单</a>
-                <a class="btn btn-sm btn-ghost" th:if="${m.bizType == 'ITEM' and m.bizId != null}"
-                   th:href="@{'/item/' + ${m.bizId}}">查看物品</a>
+                <button class="btn btn-sm btn-ghost" type="button" th:if="${m.bizId != null}"
+                        data-open-message="1"
+                        th:text="${m.bizType == 'ORDER'} ? '查看订单' : '查看物品'">查看</button>
+                <span class="small muted" th:if="${m.bizId == null}">无需跳转的系统消息</span>
             </div>
         </div>
     </div>
