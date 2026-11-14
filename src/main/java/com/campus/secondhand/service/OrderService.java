@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.secondhand.common.Constants;
 import com.campus.secondhand.entity.Item;
 import com.campus.secondhand.entity.Orders;
+import com.campus.secondhand.entity.Payment;
 import com.campus.secondhand.entity.User;
 import com.campus.secondhand.exception.BusinessException;
 import com.campus.secondhand.mapper.ItemMapper;
@@ -128,14 +129,7 @@ public class OrderService {
         }
     }
 
-    /**
-     * 买家支付（保留给内部/测试调用）：真正的在线支付入口在 {@link PaymentService}
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void pay(Long orderId, Long userId) {
-        getOwnOrder(orderId, userId, true);
-        markPaid(orderId);
-    }
+    
 
     /**
      * 在线支付成功后的订单状态推进：待支付 → 已支付（资金托管），物品 交易中 → 已售出
@@ -173,23 +167,82 @@ public class OrderService {
     }
 
     /**
-     * 买家确认收货，订单完成
+     * 买家确认收货，订单完成，托管款结算给卖家
      */
     @Transactional(rollbackFor = Exception.class)
     public void confirm(Long orderId, Long userId) {
         Orders order = getOwnOrder(orderId, userId, true);
+        finishAndSettle(order);
+    }
+
+    /**
+     * 已支付订单超时未确认收货时，由定时任务自动完成并结算托管款。
+     *
+     * @return 本次自动完成的订单数
+     */
+    public int autoFinishPaid(int days) {
+        LocalDateTime deadline = LocalDateTime.now().minusDays(Math.max(days, 1));
+        var list = ordersMapper.selectList(new LambdaQueryWrapper<Orders>()
+                .eq(Orders::getStatus, Constants.ORDER_PAID)
+                .lt(Orders::getPayTime, deadline)
+                .last("LIMIT 50"));
+        int count = 0;
+        for (Orders order : list) {
+            // 通过代理调用，确保事务生效
+            if (selfProvider.getObject().finishBySystem(order.getId())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 系统自动完成（超时未确认收货的兜底）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean finishBySystem(Long orderId) {
+        Orders order = ordersMapper.selectForUpdate(orderId);
+        if (order == null || !isStatus(order.getStatus(), Constants.ORDER_PAID)) {
+            return false;
+        }
+        finishAndSettle(order);
+        log.info("订单 {} 已支付超过 {} 天未确认收货，系统自动完成并结算", order.getOrderNo(),
+                order.getPayTime() == null ? "-" : daysBetween(order.getPayTime()));
+        return true;
+    }
+
+    /**
+     * 订单状态 1 → 2 并把托管款结算给卖家（买家确认收货 / 系统自动完成共用）
+     * <p>
+     * 加锁顺序：订单行（调用方已通过 update 或 selectForUpdate 锁定）→ 支付流水。
+     */
+    private void finishAndSettle(Orders order) {
         int rows = ordersMapper.update(null, new LambdaUpdateWrapper<Orders>()
-                .eq(Orders::getId, orderId)
+                .eq(Orders::getId, order.getId())
                 .eq(Orders::getStatus, Constants.ORDER_PAID)
                 .set(Orders::getStatus, Constants.ORDER_FINISHED)
                 .set(Orders::getFinishTime, LocalDateTime.now()));
         if (rows == 0) {
             throw new BusinessException("订单状态已变化，请刷新后重试");
         }
+        // 资金出托管：流水 1 → 4，写结算时间；0 行说明没有托管中的流水，属于数据异常，记录后由后台核对
+        int settled = paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
+                .eq(Payment::getOrderId, order.getId())
+                .eq(Payment::getStatus, Constants.PAY_SUCCESS)
+                .set(Payment::getStatus, Constants.PAY_SETTLED)
+                .set(Payment::getSettleTime, LocalDateTime.now())
+                .set(Payment::getUpdateTime, LocalDateTime.now()));
+        if (settled == 0) {
+            log.warn("订单 {} 完成时未找到托管中的支付流水，请后台核对资金", order.getOrderNo());
+        }
         Item item = itemMapper.selectById(order.getItemId());
         notifyParties(order, item, "交易已完成",
-                "买家已确认收货，本次交易完成，感谢使用校园二手平台。", "order-notify", false);
-        log.info("订单 {} 已完成", order.getOrderNo());
+                "买家已确认收货，本次交易完成，托管款项已结算给卖家，感谢使用校园二手平台。", "order-notify", false);
+        log.info("订单 {} 已完成，托管款已结算{}", order.getOrderNo(), settled > 0 ? "" : "（无托管流水，已告警）");
+    }
+
+    private long daysBetween(LocalDateTime from) {
+        return Math.max(java.time.Duration.between(from, LocalDateTime.now()).toDays(), 0);
     }
 
     /**
@@ -245,10 +298,10 @@ public class OrderService {
      * 关闭该订单下所有「待支付」的支付流水（订单取消/超时关闭时调用），避免关闭后仍能支付
      */
     private void closePendingPayments(Long orderId) {
-        int closed = paymentMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.campus.secondhand.entity.Payment>()
-                .eq(com.campus.secondhand.entity.Payment::getOrderId, orderId)
-                .eq(com.campus.secondhand.entity.Payment::getStatus, Constants.PAY_WAIT)
-                .set(com.campus.secondhand.entity.Payment::getStatus, Constants.PAY_CLOSED));
+        int closed = paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
+                .eq(Payment::getOrderId, orderId)
+                .eq(Payment::getStatus, Constants.PAY_WAIT)
+                .set(Payment::getStatus, Constants.PAY_CLOSED));
         if (closed > 0) {
             log.info("订单 {} 关闭时同步关闭 {} 条未支付流水", orderId, closed);
         }
@@ -344,24 +397,52 @@ public class OrderService {
     private void notifyParties(Orders order, Item item, String title, String content,
                                String mailTemplate, boolean mailBoth) {
         String itemTitle = item == null ? "相关物品" : item.getTitle();
-        mqProducer.sendNotify(new NotifyMessage(order.getBuyerId(), "order", title, content,
-                order.getItemId(), order.getId()));
-        mqProducer.sendNotify(new NotifyMessage(order.getSellerId(), "order", title, content,
-                order.getItemId(), order.getId()));
-        User buyer = userService.getById(order.getBuyerId());
-        Map<String, Object> params = new HashMap<>();
-        params.put("orderNo", order.getOrderNo());
-        params.put("itemTitle", itemTitle);
-        params.put("amount", order.getAmount());
-        params.put("title", title);
-        params.put("content", content);
-        params.put("orderId", order.getId());
-        mqProducer.sendMail(new MailMessage(buyer.getEmail(), buyer.getNickname(),
-                "【校园二手】" + title, mailTemplate, params, order.getId()));
-        if (mailBoth) {
-            User seller = userService.getById(order.getSellerId());
-            mqProducer.sendMail(new MailMessage(seller.getEmail(), seller.getNickname(),
+        // 事务提交后再发 MQ：避免回滚后仍然发出「支付成功」「订单已完成」这类假通知，
+        // 也避免消费者在事务未提交时读到旧的订单状态
+        runAfterCommit(() -> dispatchNotify(order, title, content, itemTitle, mailTemplate, mailBoth));
+    }
+
+    private void dispatchNotify(Orders order, String title, String content, String itemTitle,
+                                String mailTemplate, boolean mailBoth) {
+        try {
+            mqProducer.sendNotify(new NotifyMessage(order.getBuyerId(), "order", title, content,
+                    order.getItemId(), order.getId()));
+            mqProducer.sendNotify(new NotifyMessage(order.getSellerId(), "order", title, content,
+                    order.getItemId(), order.getId()));
+            User buyer = userService.getById(order.getBuyerId());
+            Map<String, Object> params = new HashMap<>();
+            params.put("orderNo", order.getOrderNo());
+            params.put("itemTitle", itemTitle);
+            params.put("amount", order.getAmount());
+            params.put("title", title);
+            params.put("content", content);
+            params.put("orderId", order.getId());
+            mqProducer.sendMail(new MailMessage(buyer.getEmail(), buyer.getNickname(),
                     "【校园二手】" + title, mailTemplate, params, order.getId()));
+            if (mailBoth) {
+                User seller = userService.getById(order.getSellerId());
+                mqProducer.sendMail(new MailMessage(seller.getEmail(), seller.getNickname(),
+                        "【校园二手】" + title, mailTemplate, params, order.getId()));
+            }
+        } catch (Exception e) {
+            log.warn("订单通知投递失败，order={} title={}", order.getOrderNo(), title, e);
+        }
+    }
+
+    /**
+     * 事务存在时把任务推迟到提交之后执行，否则立即执行
+     */
+    private void runAfterCommit(Runnable task) {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            task.run();
+                        }
+                    });
+        } else {
+            task.run();
         }
     }
 

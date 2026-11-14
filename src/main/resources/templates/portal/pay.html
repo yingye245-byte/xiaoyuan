@@ -48,7 +48,8 @@
             <div class="form-label">选择支付方式</div>
             <div class="pay-channels">
                 <label class="pay-channel" th:each="ch,st : ${channels}">
-                    <input type="radio" name="channel" th:value="${ch[0]}" th:checked="${st.index == 0}"/>
+                    <input type="radio" name="channel" th:value="${ch[0]}"
+                           th:checked="${payment != null and payment.channel != null ? ch[0] == payment.channel : st.index == 0}"/>
                     <span class="pay-channel-name" th:text="${ch[1]}">支付宝</span>
                     <span class="pay-channel-tip" th:text="${ch[2]}">模拟网关</span>
                 </label>

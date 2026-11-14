@@ -294,14 +294,17 @@ CREATE TABLE tb_payment (
   user_id     BIGINT        NOT NULL COMMENT '付款人',
   amount      DECIMAL(10,2) NOT NULL COMMENT '支付金额',
   channel     VARCHAR(20)   NOT NULL COMMENT '支付渠道 ALIPAY/WECHAT/CAMPUS_CARD（演示环境为模拟网关）',
-  status      TINYINT       NOT NULL DEFAULT 0 COMMENT '0待支付 1支付成功(托管中) 2支付失败 3已关闭',
+  status      TINYINT       NOT NULL DEFAULT 0 COMMENT '0待支付 1支付成功(托管中) 2支付失败 3已关闭 4已结算给卖家',
   trade_no    VARCHAR(64)   DEFAULT NULL COMMENT '模拟网关交易号',
   notify_time DATETIME      DEFAULT NULL COMMENT '网关回调时间',
+  settle_time DATETIME      DEFAULT NULL COMMENT '托管款结算给卖家的时间（买家确认收货或系统自动完成）',
   create_time DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_time DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (id),
   UNIQUE KEY uk_pay_no (pay_no),
   KEY idx_order (order_id),
+  UNIQUE KEY uk_order (order_id),
+  KEY idx_status (status),
   KEY idx_user_status (user_id, status),
   KEY idx_create (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付流水表';
@@ -447,13 +450,14 @@ INSERT INTO tb_orders (id, order_no, item_id, buyer_id, seller_id, amount, statu
 (8, 'SC202611070932180008', 8, 5, 3, 39.00, 0, NULL, NULL, NULL, DATE_SUB(NOW(), INTERVAL 8 MINUTE));
 
 -- 支付流水（从既有订单派生：已支付/已完成的订单都有对应流水，保证对账数据完整）
-INSERT INTO tb_payment (pay_no, order_id, order_no, item_id, item_title, user_id, amount, channel, status, trade_no, notify_time, create_time)
+INSERT INTO tb_payment (pay_no, order_id, order_no, item_id, item_title, user_id, amount, channel, status, trade_no, notify_time, settle_time, create_time)
 SELECT CONCAT('PAY', DATE_FORMAT(o.create_time, '%Y%m%d%H%i%s'), LPAD(o.id, 4, '0')),
        o.id, o.order_no, o.item_id, i.title, o.buyer_id, o.amount,
        ELT((o.id % 3) + 1, 'ALIPAY', 'WECHAT', 'CAMPUS_CARD'),
-       CASE WHEN o.status IN (1, 2) THEN 1 WHEN o.status = 0 THEN 0 ELSE 3 END,
+       CASE WHEN o.status = 2 THEN 4 WHEN o.status = 1 THEN 1 WHEN o.status = 0 THEN 0 ELSE 3 END,
        CASE WHEN o.status IN (1, 2) THEN CONCAT('MOCK', o.id, DATE_FORMAT(o.create_time, '%Y%m%d%H%i%s')) ELSE NULL END,
        CASE WHEN o.status IN (1, 2) THEN o.pay_time ELSE NULL END,
+       CASE WHEN o.status = 2 THEN o.finish_time ELSE NULL END,
        o.create_time
 FROM tb_orders o
 JOIN tb_item i ON i.id = o.item_id;

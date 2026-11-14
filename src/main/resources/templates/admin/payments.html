@@ -58,6 +58,7 @@
                         <th>金额</th>
                         <th>渠道</th>
                         <th>状态</th>
+                        <th>订单状态</th>
                         <th>网关交易号</th>
                         <th>支付时间</th>
                     </tr>
@@ -76,6 +77,7 @@
                                   th:classappend="${p.status == 1} ? 'tag-green' : (${p.status == 0} ? 'tag-orange' : 'tag-gray')"
                                   th:text="${p.statusText}">支付成功</span>
                         </td>
+                        <td class="small" th:text="${p.orderStatusText}">已支付</td>
                         <td class="small" th:text="${p.tradeNo != null} ? ${p.tradeNo} : '—'">—</td>
                         <td class="small"
                             th:text="${p.notifyTime != null} ? ${#temporals.format(p.notifyTime, 'yyyy-MM-dd HH:mm:ss')} : '—'">—</td>

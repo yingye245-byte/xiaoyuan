@@ -3,10 +3,12 @@ package com.campus.secondhand.controller;
 import com.campus.secondhand.common.Constants;
 import com.campus.secondhand.entity.Orders;
 import com.campus.secondhand.entity.Payment;
+import com.campus.secondhand.exception.BusinessException;
 import com.campus.secondhand.service.OrderService;
 import com.campus.secondhand.service.PaymentService;
 import com.campus.secondhand.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,6 +23,7 @@ import java.time.ZoneId;
 /**
  * 收银台：在线支付入口（担保交易）
  */
+@Slf4j
 @Controller
 @RequiredArgsConstructor
 public class PaymentController {
@@ -35,10 +38,19 @@ public class PaymentController {
      * 收银台页面：展示订单、金额、支付渠道与担保说明
      */
     @GetMapping("/pay/{orderId}")
-    public String cashier(@PathVariable Long orderId, Model model) {
+    public String cashier(@PathVariable Long orderId, Model model, RedirectAttributes redirectAttributes) {
         Long userId = SecurityUtils.getUserId();
-        Payment payment = paymentService.prepare(orderId, userId);
-        Orders order = orderService.detail(orderId, userId);
+        Payment payment;
+        Orders order;
+        try {
+            // prepare 内部已校验归属、订单状态与支付时限
+            payment = paymentService.prepare(orderId, userId);
+            order = orderService.detail(orderId, userId);
+        } catch (BusinessException e) {
+            // 已支付 / 已取消 / 已超时的订单不必停在 500 错误页，直接回订单详情并提示原因
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+            return "redirect:/order/" + orderId;
+        }
         long deadlineMillis = order.getCreateTime()
                 .plusMinutes(orderTimeoutMinutes)
                 .atZone(ZoneId.systemDefault())
@@ -61,10 +73,23 @@ public class PaymentController {
                           @RequestParam("channel") String channel,
                           RedirectAttributes redirectAttributes) {
         Long userId = SecurityUtils.getUserId();
-        paymentService.confirm(payNo, userId, channel);
-        redirectAttributes.addFlashAttribute("success",
-                "支付成功，¥" + orderService.detail(orderId, userId).getAmount()
-                        + " 已由平台托管，确认收货后结算给卖家");
-        return "redirect:/order/" + orderId;
+        // 支付流水必须属于路径上的订单，避免「用自己的 A 单流水给 B 单付款」的错位提示
+        Payment payment = paymentService.getOwnPayment(payNo, userId);
+        if (!payment.getOrderId().equals(orderId)) {
+            redirectAttributes.addFlashAttribute("error", "支付流水与订单不匹配，请重新打开收银台");
+            return "redirect:/order/" + orderId;
+        }
+        try {
+            Long paidOrderId = paymentService.confirm(payNo, userId, channel);
+            // 金额与跳转都以服务端返回的订单为准，不信任路径参数
+            Orders paidOrder = orderService.detail(paidOrderId, userId);
+            redirectAttributes.addFlashAttribute("msg",
+                    "支付成功，¥" + paidOrder.getAmount() + " 已由平台托管，确认收货后结算给卖家");
+            return "redirect:/order/" + paidOrderId;
+        } catch (BusinessException e) {
+            log.warn("用户 {} 支付失败：payNo={} 原因={}", userId, payNo, e.getMessage());
+            redirectAttributes.addFlashAttribute("error", e.getMessage());
+            return "redirect:/order/" + orderId;
+        }
     }
 }

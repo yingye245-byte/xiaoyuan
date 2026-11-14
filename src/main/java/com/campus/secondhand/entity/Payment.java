@@ -46,7 +46,7 @@ public class Payment implements Serializable {
     /** 支付渠道：ALIPAY / WECHAT / CAMPUS_CARD */
     private String channel;
 
-    /** 0 待支付 1 支付成功（托管中） 2 支付失败 3 已关闭 */
+    /** 0 待支付 1 支付成功（托管中） 2 支付失败 3 已关闭 4 已结算给卖家 */
     private Integer status;
 
     /** 模拟网关返回的交易号 */
@@ -54,6 +54,9 @@ public class Payment implements Serializable {
 
     /** 网关异步通知时间 */
     private LocalDateTime notifyTime;
+
+    /** 托管款结算给卖家的时间（买家确认收货或系统自动完成时写入） */
+    private LocalDateTime settleTime;
 
     private LocalDateTime createTime;
 
@@ -72,5 +75,15 @@ public class Payment implements Serializable {
 
     public String getStatusText() {
         return com.campus.secondhand.common.Constants.payStatusText(status);
+    }
+
+    /** 后台对账用：订单当前状态文案 */
+    public String getOrderStatusText() {
+        return com.campus.secondhand.common.Constants.orderStatusText(orderStatus);
+    }
+
+    /** 是否仍处于资金托管中（已支付但尚未结算给卖家） */
+    public boolean isEscrow() {
+        return status != null && status == com.campus.secondhand.common.Constants.PAY_SUCCESS;
     }
 }

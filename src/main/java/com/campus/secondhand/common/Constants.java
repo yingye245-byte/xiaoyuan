@@ -55,6 +55,8 @@ public final class Constants {
     public static final int PAY_FAIL = 2;
     /** 已关闭（订单取消或超时关闭） */
     public static final int PAY_CLOSED = 3;
+    /** 已结算（买家确认收货，托管款结算给卖家） */
+    public static final int PAY_SETTLED = 4;
 
     /* ---------------- 支付渠道（演示环境均为模拟网关） ---------------- */
     public static final String PAY_CHANNEL_ALIPAY = "ALIPAY";
@@ -93,6 +95,8 @@ public final class Constants {
                 return "支付失败";
             case PAY_CLOSED:
                 return "已关闭";
+            case PAY_SETTLED:
+                return "已结算给卖家";
             default:
                 return "未知";
         }

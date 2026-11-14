@@ -16,6 +16,7 @@ import com.campus.secondhand.mapper.PaymentMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +26,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -41,7 +43,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * 1. 金额只以服务端订单金额为准，前端传什么都无效；
  * 2. 回调带 HMAC-SHA256 签名，验签失败一律拒绝；
  * 3. 支付流水与订单状态各自 CAS 更新，重复回调幂等，不会重复入账；
- * 4. 支付成功才把物品置为已售出，失败或超时由定时任务回滚物品状态。
+ * 4. 支付成功才把物品置为已售出，失败或超时由定时任务回滚物品状态；
+ * 5. 加锁顺序统一为「订单 → 物品 → 支付流水」，与取消/超时链路保持一致，避免死锁。
  */
 @Slf4j
 @Service
@@ -49,6 +52,10 @@ import java.util.concurrent.ThreadLocalRandom;
 public class PaymentService {
 
     private static final DateTimeFormatter PAY_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
+
+    /** 下单后允许支付的时间窗口（分钟），与 MQ 延迟队列、页面倒计时同口径 */
+    @Value("${app.order-timeout-minutes:30}")
+    private int orderTimeoutMinutes;
 
     private final PaymentMapper paymentMapper;
     private final OrdersMapper ordersMapper;
@@ -60,11 +67,14 @@ public class PaymentService {
     private String mockSecret;
 
     /**
-     * 打开收银台：为待支付订单准备一条支付流水（同一订单重复进入收银台会复用未支付的流水）
+     * 打开收银台：为待支付订单准备一条支付流水（同一订单重复进入收银台会复用未支付的流水）。
+     * <p>
+     * 先对订单行加锁，保证同一订单并发打开收银台只会产生一条待支付流水。
      */
     @Transactional(rollbackFor = Exception.class)
     public Payment prepare(Long orderId, Long userId) {
-        Orders order = ordersMapper.selectById(orderId);
+        // 订单行锁：与 confirm / cancel / autoCancel 的加锁顺序保持一致
+        Orders order = ordersMapper.selectForUpdate(orderId);
         if (order == null) {
             throw new BusinessException(404, "订单不存在");
         }
@@ -72,13 +82,11 @@ public class PaymentService {
             throw new BusinessException(403, "只能支付自己的订单");
         }
         if (!StatusUtils.is(order.getStatus(), Constants.ORDER_WAIT_PAY)) {
-            throw new BusinessException("该订单当前状态不需要支付");
+            throw new BusinessException(400, "该订单当前状态不需要支付");
         }
-        Payment existed = paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
-                .eq(Payment::getOrderId, orderId)
-                .eq(Payment::getStatus, Constants.PAY_WAIT)
-                .orderByDesc(Payment::getId)
-                .last("LIMIT 1"));
+        checkTimeout(order);
+
+        Payment existed = findPendingPayment(orderId);
         if (existed != null) {
             if (existed.getAmount() == null || existed.getAmount().compareTo(order.getAmount()) != 0) {
                 existed.setAmount(order.getAmount());
@@ -98,7 +106,18 @@ public class PaymentService {
         payment.setAmount(order.getAmount());
         payment.setChannel(Constants.PAY_CHANNEL_ALIPAY);
         payment.setStatus(Constants.PAY_WAIT);
-        paymentMapper.insert(payment);
+        try {
+            paymentMapper.insert(payment);
+        } catch (DuplicateKeyException e) {
+            // 极端并发（或 pay_no 撞号）：回查已存在的待支付流水复用，仍失败则提示重试
+            Payment another = findPendingPayment(orderId);
+            if (another != null) {
+                return another;
+            }
+            log.warn("支付流水号冲突，重新生成 payNo={}", payment.getPayNo());
+            payment.setPayNo(generatePayNo());
+            paymentMapper.insert(payment);
+        }
         return payment;
     }
 
@@ -122,13 +141,37 @@ public class PaymentService {
     @Transactional(rollbackFor = Exception.class)
     public Long confirm(String payNo, Long userId, String channel) {
         Payment payment = getOwnPayment(payNo, userId);
+
         if (StatusUtils.is(payment.getStatus(), Constants.PAY_SUCCESS)) {
-            // 幂等：重复提交/重复回调直接返回成功，不重复入账
+            // 幂等：重复提交/重复回调直接返回成功，但必须确认订单确实仍处于「已支付待交付」
+            Orders paidOrder = ordersMapper.selectById(payment.getOrderId());
+            if (paidOrder == null || !StatusUtils.is(paidOrder.getStatus(), Constants.ORDER_PAID)) {
+                log.error("支付流水 {} 已成功但订单状态异常：orderId={} orderStatus={}",
+                        payNo, payment.getOrderId(), paidOrder == null ? null : paidOrder.getStatus());
+                throw new BusinessException(409, "订单状态异常，请联系平台客服核对");
+            }
             return payment.getOrderId();
         }
         if (!StatusUtils.is(payment.getStatus(), Constants.PAY_WAIT)) {
-            throw new BusinessException("该支付流水已关闭，请重新下单");
+            throw new BusinessException(409, "该支付流水已关闭，请重新下单");
         }
+
+        // 先锁订单行，再改流水：与取消/超时链路「订单 → 物品 → 流水」保持同一加锁顺序
+        Orders order = ordersMapper.selectForUpdate(payment.getOrderId());
+        if (order == null) {
+            throw new BusinessException(404, "订单不存在");
+        }
+        if (!order.getBuyerId().equals(userId)) {
+            throw new BusinessException(403, "只能支付自己的订单");
+        }
+        if (!StatusUtils.is(order.getStatus(), Constants.ORDER_WAIT_PAY)) {
+            throw new BusinessException(409, "订单已取消或已支付，请刷新订单状态");
+        }
+        checkTimeout(order);
+        if (payment.getAmount().compareTo(order.getAmount()) != 0) {
+            throw new BusinessException("支付金额与订单金额不一致，已拦截");
+        }
+
         if (channel == null || channel.isBlank()) {
             throw new BusinessException("请选择支付方式");
         }
@@ -143,14 +186,6 @@ public class PaymentService {
             throw new BusinessException("不支持的支付方式");
         }
 
-        Orders order = ordersMapper.selectById(payment.getOrderId());
-        if (order == null) {
-            throw new BusinessException(404, "订单不存在");
-        }
-        if (payment.getAmount().compareTo(order.getAmount()) != 0) {
-            throw new BusinessException("支付金额与订单金额不一致，已拦截");
-        }
-
         // 模拟第三方网关：生成交易号并用密钥签名
         String tradeNo = channel + LocalDateTime.now().format(PAY_NO_FORMAT)
                 + ThreadLocalRandom.current().nextInt(1000, 9999);
@@ -159,23 +194,48 @@ public class PaymentService {
             throw new BusinessException("支付回调验签失败，已拒绝本次支付");
         }
 
+        LocalDateTime now = LocalDateTime.now();
         int rows = paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
                 .eq(Payment::getId, payment.getId())
                 .eq(Payment::getStatus, Constants.PAY_WAIT)
                 .set(Payment::getStatus, Constants.PAY_SUCCESS)
                 .set(Payment::getChannel, channel)
                 .set(Payment::getTradeNo, tradeNo)
-                .set(Payment::getNotifyTime, LocalDateTime.now()));
+                .set(Payment::getNotifyTime, now)
+                .set(Payment::getUpdateTime, now));
         if (rows == 0) {
-            // 并发重复回调：以先到的那次为准，仍按成功处理
-            log.info("支付流水 {} 已被其他线程处理，按幂等返回", payNo);
-            return payment.getOrderId();
+            // 没更新到行有两种可能：别的线程刚支付成功（真幂等），或流水已被取消/超时关闭
+            Payment latest = paymentMapper.selectById(payment.getId());
+            Integer latestStatus = latest == null ? null : latest.getStatus();
+            if (StatusUtils.is(latestStatus, Constants.PAY_SUCCESS)) {
+                log.info("支付流水 {} 已被其他线程处理，按幂等返回", payNo);
+                return payment.getOrderId();
+            }
+            log.warn("支付未生效：payNo={} orderId={} 最新流水状态={}", payNo, payment.getOrderId(), latestStatus);
+            throw new BusinessException(409, "支付未生效：订单已关闭或支付流水已失效，请重新下单");
         }
 
         orderService.markPaid(payment.getOrderId());
         log.info("订单 {} 在线支付成功：payNo={} channel={} amount={} tradeNo={}",
                 order.getOrderNo(), payNo, channel, payment.getAmount(), tradeNo);
         return payment.getOrderId();
+    }
+
+    /**
+     * 买家确认收货（或系统自动完成）后结算托管款：流水 1 → 4 并写入结算时间。
+     * <p>
+     * 由 OrderService.confirm 在同一事务内调用，保证「订单完成」与「资金结算」原子发生。
+     *
+     * @return 更新的流水条数，0 表示该订单没有托管中的流水（数据异常，需要人工核对）
+     */
+    public int settle(Long orderId) {
+        LocalDateTime now = LocalDateTime.now();
+        return paymentMapper.update(null, new LambdaUpdateWrapper<Payment>()
+                .eq(Payment::getOrderId, orderId)
+                .eq(Payment::getStatus, Constants.PAY_SUCCESS)
+                .set(Payment::getStatus, Constants.PAY_SETTLED)
+                .set(Payment::getSettleTime, now)
+                .set(Payment::getUpdateTime, now));
     }
 
     /**
@@ -203,6 +263,28 @@ public class PaymentService {
                 .eq(Payment::getOrderId, orderId)
                 .eq(Payment::getStatus, Constants.PAY_WAIT)
                 .set(Payment::getStatus, Constants.PAY_CLOSED));
+    }
+
+    private Payment findPendingPayment(Long orderId) {
+        List<Payment> list = paymentMapper.selectList(new LambdaQueryWrapper<Payment>()
+                .eq(Payment::getOrderId, orderId)
+                .eq(Payment::getStatus, Constants.PAY_WAIT)
+                .orderByDesc(Payment::getId)
+                .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 服务端校验支付时限：页面倒计时只是提示，真正的闸门在这里
+     */
+    private void checkTimeout(Orders order) {
+        if (order.getCreateTime() == null) {
+            return;
+        }
+        LocalDateTime deadline = order.getCreateTime().plusMinutes(orderTimeoutMinutes);
+        if (LocalDateTime.now().isAfter(deadline)) {
+            throw new BusinessException(409, "订单支付已超时，请重新下单");
+        }
     }
 
     private String generatePayNo() {
@@ -233,14 +315,15 @@ public class PaymentService {
     }
 
     /**
-     * 供订单详情页展示：该订单是否已完成在线支付
+     * 供订单详情页展示：该订单的支付流水（托管中或已结算）
      */
     public Payment getSuccessPayment(Long orderId) {
-        return paymentMapper.selectOne(new LambdaQueryWrapper<Payment>()
+        List<Payment> list = paymentMapper.selectList(new LambdaQueryWrapper<Payment>()
                 .eq(Payment::getOrderId, orderId)
-                .eq(Payment::getStatus, Constants.PAY_SUCCESS)
+                .in(Payment::getStatus, Constants.PAY_SUCCESS, Constants.PAY_SETTLED)
                 .orderByDesc(Payment::getId)
                 .last("LIMIT 1"));
+        return list.isEmpty() ? null : list.get(0);
     }
 
     /**

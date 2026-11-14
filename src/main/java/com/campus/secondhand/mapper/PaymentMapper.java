@@ -37,10 +37,13 @@ public interface PaymentMapper extends BaseMapper<Payment> {
                                      @Param("channel") String channel);
 
     /**
-     * 统计托管中的资金总额（支付成功但订单未完成的金额）
+     * 统计托管中的资金总额：流水「支付成功（托管中）」且订单「已支付·待交付」。
+     * <p>
+     * 买家确认收货后流水会置为「已结算」(4)，因此不需要再按订单状态排除已完成订单；
+     * 这里额外要求订单状态为 1，是为了排除脏数据（例如订单已取消但流水仍为托管中）。
      */
     @Select("SELECT IFNULL(SUM(p.amount), 0) FROM tb_payment p " +
             "JOIN tb_orders o ON o.id = p.order_id " +
-            "WHERE p.status = 1 AND o.status IN (0, 1)")
+            "WHERE p.status = 1 AND o.status = 1")
     java.math.BigDecimal selectEscrowAmount();
 }
