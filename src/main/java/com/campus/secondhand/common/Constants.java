@@ -46,6 +46,58 @@ public final class Constants {
     public static final int AUDIT_PASS = 1;
     public static final int AUDIT_REJECT = 2;
 
+    /* ---------------- 支付流水状态 ---------------- */
+    /** 待支付 */
+    public static final int PAY_WAIT = 0;
+    /** 支付成功（资金进入平台托管） */
+    public static final int PAY_SUCCESS = 1;
+    /** 支付失败 */
+    public static final int PAY_FAIL = 2;
+    /** 已关闭（订单取消或超时关闭） */
+    public static final int PAY_CLOSED = 3;
+
+    /* ---------------- 支付渠道（演示环境均为模拟网关） ---------------- */
+    public static final String PAY_CHANNEL_ALIPAY = "ALIPAY";
+    public static final String PAY_CHANNEL_WECHAT = "WECHAT";
+    public static final String PAY_CHANNEL_CAMPUS = "CAMPUS_CARD";
+
+    /** 收银台展示顺序：code、名称、说明 */
+    public static final String[][] PAY_CHANNELS = {
+            {PAY_CHANNEL_ALIPAY, "支付宝", "模拟网关，演示环境不会真实扣款"},
+            {PAY_CHANNEL_WECHAT, "微信支付", "模拟网关，演示环境不会真实扣款"},
+            {PAY_CHANNEL_CAMPUS, "校园一卡通", "模拟网关，演示环境不会真实扣款"}
+    };
+
+    public static String payChannelText(String channel) {
+        if (channel == null) {
+            return "未知";
+        }
+        for (String[] item : PAY_CHANNELS) {
+            if (item[0].equals(channel)) {
+                return item[1];
+            }
+        }
+        return channel;
+    }
+
+    public static String payStatusText(Integer status) {
+        if (status == null) {
+            return "未知";
+        }
+        switch (status) {
+            case PAY_WAIT:
+                return "待支付";
+            case PAY_SUCCESS:
+                return "支付成功（托管中）";
+            case PAY_FAIL:
+                return "支付失败";
+            case PAY_CLOSED:
+                return "已关闭";
+            default:
+                return "未知";
+        }
+    }
+
     /* ---------------- 消息状态 ---------------- */
     public static final int MSG_UNREAD = 0;
     public static final int MSG_READ = 1;
@@ -96,7 +148,7 @@ public final class Constants {
             case ORDER_WAIT_PAY:
                 return "待支付";
             case ORDER_PAID:
-                return "待交付";
+                return "已支付·待交付";
             case ORDER_FINISHED:
                 return "已完成";
             case ORDER_CANCELED:

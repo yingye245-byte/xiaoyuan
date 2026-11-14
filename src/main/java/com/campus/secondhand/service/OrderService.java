@@ -11,6 +11,7 @@ import com.campus.secondhand.entity.User;
 import com.campus.secondhand.exception.BusinessException;
 import com.campus.secondhand.mapper.ItemMapper;
 import com.campus.secondhand.mapper.OrdersMapper;
+import com.campus.secondhand.mapper.PaymentMapper;
 import com.campus.secondhand.mq.MailMessage;
 import com.campus.secondhand.mq.MqProducer;
 import com.campus.secondhand.mq.NotifyMessage;
@@ -60,6 +61,7 @@ public class OrderService {
 
     private final OrdersMapper ordersMapper;
     private final ItemMapper itemMapper;
+    private final PaymentMapper paymentMapper;
     private final UserService userService;
     private final ItemService itemService;
     private final MqProducer mqProducer;
@@ -127,11 +129,25 @@ public class OrderService {
     }
 
     /**
-     * 买家支付（模拟支付，无第三方网关）
+     * 买家支付（保留给内部/测试调用）：真正的在线支付入口在 {@link PaymentService}
      */
     @Transactional(rollbackFor = Exception.class)
     public void pay(Long orderId, Long userId) {
-        Orders order = getOwnOrder(orderId, userId, true);
+        getOwnOrder(orderId, userId, true);
+        markPaid(orderId);
+    }
+
+    /**
+     * 在线支付成功后的订单状态推进：待支付 → 已支付（资金托管），物品 交易中 → 已售出
+     * <p>
+     * 调用方（PaymentService）已完成金额、签名、归属校验，这里只做状态 CAS，保证不会重复推进。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void markPaid(Long orderId) {
+        Orders order = ordersMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(404, "订单不存在");
+        }
         int rows = ordersMapper.update(null, new LambdaUpdateWrapper<Orders>()
                 .eq(Orders::getId, orderId)
                 .eq(Orders::getStatus, Constants.ORDER_WAIT_PAY)
@@ -150,9 +166,10 @@ public class OrderService {
         }
         itemService.evictItemCache(order.getItemId());
         Item item = itemMapper.selectById(order.getItemId());
-        notifyParties(order, item, "买家已付款",
-                "买家已完成支付，请尽快与买家约定时间地点完成线下交付。", "order-notify", false);
-        log.info("订单 {} 支付成功", order.getOrderNo());
+        notifyParties(order, item, "支付成功，资金已托管",
+                "买家已完成在线支付，款项由平台托管，请尽快与买家约定时间地点完成线下交付，"
+                        + "买家确认收货后款项将结算给你。", "order-notify", true);
+        log.info("订单 {} 支付成功，进入资金托管", order.getOrderNo());
     }
 
     /**
@@ -191,8 +208,9 @@ public class OrderService {
             throw new BusinessException("只有待支付订单可以取消");
         }
         releaseItem(order.getItemId());
+        closePendingPayments(orderId);
         Item item = itemMapper.selectById(order.getItemId());
-        notifyParties(order, item, "订单已取消", "订单已取消，物品重新上架，可继续购买。",
+        notifyParties(order, item, "订单已取消", "订单已取消，未支付的支付流水已关闭，物品重新上架。",
                 "order-notify", true);
         log.info("订单 {} 被买家取消：{}", order.getOrderNo(), cancelReason);
     }
@@ -215,11 +233,25 @@ public class OrderService {
             return false;
         }
         releaseItem(order.getItemId());
+        closePendingPayments(orderId);
         Item item = itemMapper.selectById(order.getItemId());
         notifyParties(order, item, "订单已超时关闭",
-                "订单超过支付时限未支付，已自动关闭，物品重新上架。", "order-notify", true);
+                "订单超过支付时限未支付，已自动关闭，未支付的支付流水已关闭，物品重新上架。", "order-notify", true);
         log.info("订单 {} 超时未支付，已自动关闭", order.getOrderNo());
         return true;
+    }
+
+    /**
+     * 关闭该订单下所有「待支付」的支付流水（订单取消/超时关闭时调用），避免关闭后仍能支付
+     */
+    private void closePendingPayments(Long orderId) {
+        int closed = paymentMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.campus.secondhand.entity.Payment>()
+                .eq(com.campus.secondhand.entity.Payment::getOrderId, orderId)
+                .eq(com.campus.secondhand.entity.Payment::getStatus, Constants.PAY_WAIT)
+                .set(com.campus.secondhand.entity.Payment::getStatus, Constants.PAY_CLOSED));
+        if (closed > 0) {
+            log.info("订单 {} 关闭时同步关闭 {} 条未支付流水", orderId, closed);
+        }
     }
 
     /**

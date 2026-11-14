@@ -3,8 +3,10 @@ package com.campus.secondhand.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.campus.secondhand.entity.Item;
 import com.campus.secondhand.entity.Orders;
+import com.campus.secondhand.entity.Payment;
 import com.campus.secondhand.service.ItemService;
 import com.campus.secondhand.service.OrderService;
+import com.campus.secondhand.service.PaymentService;
 import com.campus.secondhand.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,7 @@ public class OrderController {
 
     private final OrderService orderService;
     private final ItemService itemService;
+    private final PaymentService paymentService;
 
     /** 待支付超时分钟数，与 MQ 延迟队列、定时任务使用同一个配置项 */
     @Value("${app.order-timeout-minutes:30}")
@@ -82,6 +85,9 @@ public class OrderController {
                 .toEpochMilli();
         model.addAttribute("deadlineMillis", deadlineMillis);
         model.addAttribute("timeoutMinutes", orderTimeoutMinutes);
+        // 已支付订单展示资金托管信息（担保交易）
+        Payment payment = paymentService.getSuccessPayment(order.getId());
+        model.addAttribute("payment", payment);
         return "portal/order-detail";
     }
 
@@ -107,15 +113,17 @@ public class OrderController {
         return "portal/orders";
     }
 
+    /**
+     * 兼容旧入口：待支付订单统一跳到在线收银台，不再直接标记已支付
+     */
     @PostMapping("/order/{id}/pay")
     public String pay(@PathVariable Long id, RedirectAttributes redirectAttributes) {
-        try {
-            orderService.pay(id, SecurityUtils.getUserId());
-            redirectAttributes.addFlashAttribute("msg", "支付成功，请与卖家约定交付");
-        } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("error", e.getMessage());
+        Orders order = orderService.detail(id, SecurityUtils.getUserId());
+        if (!order.getBuyerId().equals(SecurityUtils.getUserId())) {
+            redirectAttributes.addFlashAttribute("error", "只有买家可以支付该订单");
+            return "redirect:/order/" + id;
         }
-        return "redirect:/order/" + id;
+        return "redirect:/pay/" + id;
     }
 
     @PostMapping("/order/{id}/confirm")

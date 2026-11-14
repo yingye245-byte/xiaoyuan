@@ -16,9 +16,19 @@
 ```
 注册/登录 → 发布闲置（多图，待审核） → 管理员审核 → 在售
    → 浏览/搜索/收藏/留言 → 下单（Redis 幂等 + 乐观 CAS 锁定物品）
-   → 支付 → 线下交付 → 买家确认收货（完成）
+   → 在线支付（模拟网关，款项进入平台托管） → 线下交付 → 买家确认收货（完成，托管款结算给卖家）
    ↘ 30 分钟未支付 → RabbitMQ 延迟队列自动关闭订单并释放物品
 ```
+
+### 在线支付与担保交易说明
+
+演示环境没有真实商户号，项目内置**模拟支付网关**，但支付与资金语义与真实平台一致，答辩可完整演示：
+
+1. 买家在订单详情点「去支付」进入 `/pay/{orderId}` 收银台，可选支付宝 / 微信支付 / 校园一卡通（渠道为模拟，不会真实扣款）。
+2. 确认支付时服务端按订单金额生成支付流水 `tb_payment`，回调签名用 HMAC-SHA256 校验（密钥 `app.payment.mock-secret`），金额只认服务端订单金额，页面传值不参与计算。
+3. 支付成功后款项进入**平台托管**（`tb_payment.status=1`），订单转为「已支付·待交付」，物品置「已售出」。
+4. 买家确认收货后订单完成，托管款结算给卖家；订单取消或 30 分钟超时，待支付流水置「已关闭」，不产生扣款。
+5. 后台 `/admin/payments` 可查看全部流水与「托管中的资金」，支持按流水号/订单号/物品、状态、渠道筛选。
 
 ## 2. 技术栈
 
@@ -91,7 +101,7 @@ campus-secondhand
 mysql --host=127.0.0.1 --port=3306 --user=root --password=你的密码 < sql/01-init.sql
 ```
 
-脚本会创建 `campus_secondhand` 库、15 张表、索引与注释，并写入演示数据（6 个账号、20 件物品、8 笔订单、留言/收藏/审核记录/站内消息/7 天统计/邮件日志）。
+脚本会创建 `campus_secondhand` 库、16 张表、索引与注释，并写入演示数据（6 个账号、20 件物品、8 笔订单、留言/收藏/审核记录/站内消息/7 天统计/邮件日志）。
 
 ### 4.2.1 放置演示图片
 
@@ -145,7 +155,8 @@ java -jar target/campus-secondhand.jar
 | 我的闲置 | `/my-items` | 订单管理 | `/admin/orders` |
 | 购物车 | `/cart` | 留言管理 | `/admin/comments` |
 | 我的收藏 | `/user/favorites` | 角色/菜单（只读） | `/admin/roles`、`/admin/menus` |
-| 下单/订单详情/我的订单 | `/order/create`、`/order/{id}`、`/orders/mine` | 邮件日志 | `/admin/mail-logs` |
+| 下单/收银台/订单详情/我的订单 | `/order/create`、`/pay/{orderId}`、`/order/{id}`、`/orders/mine` | 邮件日志 | `/admin/mail-logs` |
+| 支付流水与托管资金 | `/admin/payments` | 审核记录 | `/admin/items/audits` |
 | 个人资料/改密/消息/浏览记录 | `/user/profile`、`/user/password`、`/user/messages`、`/user/history` | 图表数据接口 | `/admin/api/stat/**` |
 
 ## 6. 常见问题

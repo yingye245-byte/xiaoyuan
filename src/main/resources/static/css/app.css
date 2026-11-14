@@ -1005,3 +1005,51 @@ table.data .actions {
 .status-step.canceled::before {
     background: #c62828;
 }
+/* ---------------- 收银台与担保交易 ---------------- */
+.escrow-box {
+    padding: 14px 16px;
+    border: 1px solid #ffe0c7;
+    background: #fff8f2;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.7;
+}
+.pay-channels {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 10px 0 16px;
+}
+.pay-channel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .18s, box-shadow .18s;
+}
+.pay-channel:hover {
+    border-color: var(--brand);
+    box-shadow: 0 6px 18px rgba(47, 111, 237, .08);
+}
+.pay-channel input {
+    accent-color: var(--brand);
+}
+.pay-channel-name {
+    font-weight: 600;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+.pay-channel-tip {
+    color: var(--text-sub);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-left: auto;
+    text-align: right;
+}
+.pay-channel input {
+    flex: 0 0 auto;
+}

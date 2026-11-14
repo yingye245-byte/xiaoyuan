@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/common :: head('收银台')}"></head>
+<body>
+
+<header th:replace="~{fragments/common :: header('orders')}"></header>
+<div th:replace="~{fragments/common :: flash}"></div>
+
+<div class="container" style="max-width:820px">
+
+    <div class="section-head mt-16">
+        <h2>收银台</h2>
+        <a class="small" th:href="@{'/order/' + ${order.id}}">返回订单详情</a>
+    </div>
+
+    <div class="card">
+        <div class="flex-between">
+            <div>
+                <div class="small muted">订单号</div>
+                <div class="fw-600" th:text="${order.orderNo}">SC20240101000000001</div>
+            </div>
+            <div class="text-right">
+                <div class="small muted">应付金额</div>
+                <div class="price price-lg" th:text="'¥' + ${#numbers.formatDecimal(order.amount, 1, 2)}">¥0.00</div>
+            </div>
+        </div>
+
+        <div class="flex gap-16 mt-16">
+            <img th:src="${order.itemCover}" alt="封面"
+                 style="width:88px;height:88px;border-radius:10px;object-fit:cover"/>
+            <div>
+                <div class="fw-600" th:text="${order.itemTitle}">物品标题</div>
+                <div class="small muted mt-8" th:text="'卖家：' + ${order.sellerName}">卖家</div>
+                <div class="small muted" th:text="'买家：' + ${order.buyerName}">买家</div>
+            </div>
+        </div>
+
+        <div class="flash flash-error mt-16"
+             th:attr="data-deadline=${deadlineMillis},data-timeout=${timeoutMinutes}"
+             id="payCountdown"
+             th:text="'请在 ' + ${timeoutMinutes} + ' 分钟内完成支付，超时订单将被系统自动关闭'">
+            请在 30 分钟内完成支付
+        </div>
+
+        <form th:action="@{'/pay/' + ${order.id} + '/confirm'}" method="post" class="mt-16">
+            <input type="hidden" name="payNo" th:value="${payment.payNo}"/>
+
+            <div class="form-label">选择支付方式</div>
+            <div class="pay-channels">
+                <label class="pay-channel" th:each="ch,st : ${channels}">
+                    <input type="radio" name="channel" th:value="${ch[0]}" th:checked="${st.index == 0}"/>
+                    <span class="pay-channel-name" th:text="${ch[1]}">支付宝</span>
+                    <span class="pay-channel-tip" th:text="${ch[2]}">模拟网关</span>
+                </label>
+            </div>
+
+            <div class="escrow-box mt-16">
+                <div class="fw-600">🔒 平台担保交易</div>
+                <div class="small muted mt-8">付款后资金由平台托管，卖家暂时拿不到钱；你确认收货后，托管款才结算给卖家。物品与描述不符可先不确认收货并联系管理员处理。</div>
+            </div>
+
+            <div class="flex gap-12 mt-16">
+                <button class="btn btn-accent btn-lg" type="submit"
+                        th:attr="data-confirm=${'确认模拟支付 ¥' + #numbers.formatDecimal(order.amount, 1, 2) + '？支付后款项由平台托管'}">确认支付</button>
+                <a class="btn btn-lg" th:href="@{'/order/' + ${order.id}}">稍后支付</a>
+            </div>
+            <div class="form-tip mt-8">演示环境使用模拟支付网关，不会真实扣款；支付流水与托管记录可在「后台 → 支付流水」查看。</div>
+        </form>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/common :: footer}"></footer>
+<script th:src="@{/js/app.js}"></script>
+<script>
+    // 与订单详情页同一套倒计时逻辑：服务端下发毫秒时间戳，避免日期字符串解析差异
+    (function () {
+        var box = document.getElementById('payCountdown');
+        if (!box) {
+            return;
+        }
+        var deadline = parseInt(box.getAttribute('data-deadline'), 10);
+        if (!deadline || isNaN(deadline)) {
+            return;
+        }
+        function tick() {
+            var left = deadline - Date.now();
+            if (left <= 0) {
+                box.textContent = '支付时间已到，订单即将被系统自动关闭';
+                return;
+            }
+            var m = Math.floor(left / 60000);
+            var s = Math.floor((left % 60000) / 1000);
+            box.textContent = '请在 ' + m + ' 分 ' + s + ' 秒内完成支付，超时订单将被系统自动关闭';
+            setTimeout(tick, 1000);
+        }
+        tick();
+    })();
+</script>
+</body>
+</html>

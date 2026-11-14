@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/admin :: head('支付流水')}"></head>
+<body>
+
+<div class="admin-layout">
+    <aside th:replace="~{fragments/admin :: sidebar(${menus}, ${active})}"></aside>
+
+    <div class="admin-main">
+        <header th:replace="~{fragments/admin :: topbar('支付流水')}"></header>
+
+        <main class="admin-content">
+            <div th:replace="~{fragments/admin :: flash}"></div>
+
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-label">托管中的资金</div>
+                    <div class="stat-value" th:text="'¥' + ${#numbers.formatDecimal(escrowAmount, 1, 2)}">¥0.00</div>
+                    <div class="stat-tip">已支付但买家尚未确认收货的金额</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">流水总数</div>
+                    <div class="stat-value" th:text="${page.total}">0</div>
+                    <div class="stat-tip">当前筛选条件下的支付流水条数</div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <form th:action="@{/admin/payments}" method="get" class="inline-form">
+                    <input class="input" type="text" name="keyword" th:value="${keyword}"
+                           placeholder="流水号 / 订单号 / 物品标题"/>
+                    <select class="select" name="status">
+                        <option value="">全部状态</option>
+                        <option value="0" th:selected="${status != null and status == 0}">待支付</option>
+                        <option value="1" th:selected="${status != null and status == 1}">支付成功（托管中）</option>
+                        <option value="2" th:selected="${status != null and status == 2}">支付失败</option>
+                        <option value="3" th:selected="${status != null and status == 3}">已关闭</option>
+                    </select>
+                    <select class="select" name="channel">
+                        <option value="">全部渠道</option>
+                        <option th:each="ch : ${channels}" th:value="${ch[0]}" th:text="${ch[1]}"
+                                th:selected="${channel != null and channel == ch[0]}">支付宝</option>
+                    </select>
+                    <button class="btn btn-primary" type="submit">筛选</button>
+                    <a class="btn" th:href="@{/admin/payments}">重置</a>
+                </form>
+            </div>
+
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>支付流水号</th>
+                        <th>订单号</th>
+                        <th>物品</th>
+                        <th>买家</th>
+                        <th>金额</th>
+                        <th>渠道</th>
+                        <th>状态</th>
+                        <th>网关交易号</th>
+                        <th>支付时间</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="p : ${page.records}">
+                        <td th:text="${p.id}">1</td>
+                        <td class="small" th:text="${p.payNo}">PAY...</td>
+                        <td class="small" th:text="${p.orderNo}">SC...</td>
+                        <td th:text="${p.itemTitle}">物品</td>
+                        <td th:text="${p.buyerName}">买家</td>
+                        <td th:text="'¥' + ${#numbers.formatDecimal(p.amount, 1, 2)}">¥0.00</td>
+                        <td th:text="${p.channelText}">支付宝</td>
+                        <td>
+                            <span class="tag"
+                                  th:classappend="${p.status == 1} ? 'tag-green' : (${p.status == 0} ? 'tag-orange' : 'tag-gray')"
+                                  th:text="${p.statusText}">支付成功</span>
+                        </td>
+                        <td class="small" th:text="${p.tradeNo != null} ? ${p.tradeNo} : '—'">—</td>
+                        <td class="small"
+                            th:text="${p.notifyTime != null} ? ${#temporals.format(p.notifyTime, 'yyyy-MM-dd HH:mm:ss')} : '—'">—</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div th:if="${page.records.isEmpty()}">
+                <div th:replace="~{fragments/common :: empty('暂无支付流水')}"></div>
+            </div>
+
+            <div class="mt-16" th:replace="~{fragments/common :: pager(${page})}"></div>
+        </main>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>

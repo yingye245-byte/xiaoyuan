@@ -281,6 +281,31 @@ CREATE TABLE tb_mail_log (
   KEY idx_create (create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮件发送日志表';
 
+-- -------------------------------------------------------------
+-- 16. 支付流水表（在线支付 + 担保交易资金托管）
+-- -------------------------------------------------------------
+CREATE TABLE tb_payment (
+  id          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+  pay_no      VARCHAR(32)   NOT NULL COMMENT '平台支付流水号',
+  order_id    BIGINT        NOT NULL COMMENT '订单主键',
+  order_no    VARCHAR(32)   NOT NULL COMMENT '订单号快照',
+  item_id     BIGINT        NOT NULL COMMENT '物品主键',
+  item_title  VARCHAR(100)  NOT NULL COMMENT '物品标题快照',
+  user_id     BIGINT        NOT NULL COMMENT '付款人',
+  amount      DECIMAL(10,2) NOT NULL COMMENT '支付金额',
+  channel     VARCHAR(20)   NOT NULL COMMENT '支付渠道 ALIPAY/WECHAT/CAMPUS_CARD（演示环境为模拟网关）',
+  status      TINYINT       NOT NULL DEFAULT 0 COMMENT '0待支付 1支付成功(托管中) 2支付失败 3已关闭',
+  trade_no    VARCHAR(64)   DEFAULT NULL COMMENT '模拟网关交易号',
+  notify_time DATETIME      DEFAULT NULL COMMENT '网关回调时间',
+  create_time DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_pay_no (pay_no),
+  KEY idx_order (order_id),
+  KEY idx_user_status (user_id, status),
+  KEY idx_create (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付流水表';
+
 -- =============================================================
 -- 种子数据
 -- =============================================================
@@ -318,7 +343,8 @@ INSERT INTO tb_menu (id, parent_id, name, path, perms, icon, type, sort, visible
 (14, 1,  '发布物品', '/items/publish',        'item:publish', 'IconPlus',    1, 4, 1),
 (2,  0,  '订单管理', NULL,                    NULL,           'IconDocument',0, 2, 1),
 (21, 2,  '全部订单', '/admin/orders',         'order:manage', 'IconSort',    1, 1, 1),
-(22, 2,  '我的订单', '/orders/mine',          'order:mine',   'IconTime',    1, 2, 1),
+(23, 2,  '支付流水', '/admin/payments',       'payment:list', 'IconSuccess', 1, 2, 1),
+(22, 2,  '我的订单', '/orders/mine',          'order:mine',   'IconTime',    1, 3, 1),
 (3,  0,  '用户管理', '/admin/users',          'user:list',    'IconUser',    1, 3, 1),
 (4,  0,  '留言管理', '/admin/comments',       'comment:manage','IconMessageCircle', 1, 4, 1),
 (5,  0,  '数据看板', '/admin/dashboard',      'stat:view',    'IconPicture', 1, 5, 1),
@@ -328,7 +354,7 @@ INSERT INTO tb_menu (id, parent_id, name, path, perms, icon, type, sort, visible
 
 -- 角色菜单（管理员全部；卖家：物品管理/发布/我的物品 + 订单；用户：我的订单）
 INSERT INTO tb_role_menu (role_id, menu_id) VALUES
-(3,1),(3,11),(3,12),(3,13),(3,14),(3,2),(3,21),(3,22),(3,3),(3,4),(3,5),(3,6),(3,61),(3,62),
+(3,1),(3,11),(3,12),(3,13),(3,14),(3,2),(3,21),(3,22),(3,23),(3,3),(3,4),(3,5),(3,6),(3,61),(3,62),
 (2,1),(2,13),(2,14),(2,2),(2,22),
 (1,2),(1,22);
 
@@ -419,6 +445,18 @@ INSERT INTO tb_orders (id, order_no, item_id, buyer_id, seller_id, amount, statu
 (6, 'SC202611051630410006', 6, 6, 3, 45.00, 3, NULL, NULL, '超时未支付', DATE_SUB(NOW(), INTERVAL 6 DAY)),
 (7, 'SC202611060845330007', 7, 4, 2, 55.00, 2, DATE_SUB(NOW(), INTERVAL 6 DAY), DATE_SUB(NOW(), INTERVAL 5 DAY), NULL, DATE_SUB(NOW(), INTERVAL 6 DAY)),
 (8, 'SC202611070932180008', 8, 5, 3, 39.00, 0, NULL, NULL, NULL, DATE_SUB(NOW(), INTERVAL 8 MINUTE));
+
+-- 支付流水（从既有订单派生：已支付/已完成的订单都有对应流水，保证对账数据完整）
+INSERT INTO tb_payment (pay_no, order_id, order_no, item_id, item_title, user_id, amount, channel, status, trade_no, notify_time, create_time)
+SELECT CONCAT('PAY', DATE_FORMAT(o.create_time, '%Y%m%d%H%i%s'), LPAD(o.id, 4, '0')),
+       o.id, o.order_no, o.item_id, i.title, o.buyer_id, o.amount,
+       ELT((o.id % 3) + 1, 'ALIPAY', 'WECHAT', 'CAMPUS_CARD'),
+       CASE WHEN o.status IN (1, 2) THEN 1 WHEN o.status = 0 THEN 0 ELSE 3 END,
+       CASE WHEN o.status IN (1, 2) THEN CONCAT('MOCK', o.id, DATE_FORMAT(o.create_time, '%Y%m%d%H%i%s')) ELSE NULL END,
+       CASE WHEN o.status IN (1, 2) THEN o.pay_time ELSE NULL END,
+       o.create_time
+FROM tb_orders o
+JOIN tb_item i ON i.id = o.item_id;
 
 -- 审核记录
 INSERT INTO tb_audit_record (item_id, admin_id, result, remark, create_time) VALUES
