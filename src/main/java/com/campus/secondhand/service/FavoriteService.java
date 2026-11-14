@@ -48,9 +48,6 @@ public class FavoriteService {
         boolean favorited;
         if (exist != null) {
             favoriteMapper.deleteById(exist.getId());
-            itemMapper.update(null, new LambdaUpdateWrapper<Item>()
-                    .eq(Item::getId, itemId)
-                    .setSql("favorite_count = GREATEST(favorite_count - 1, 0)"));
             favorited = false;
         } else {
             Favorite favorite = new Favorite();
@@ -61,18 +58,34 @@ public class FavoriteService {
             } catch (DuplicateKeyException e) {
                 // 并发双击：唯一索引 uk_user_item 挡住了第二条，按「已收藏」处理，不要抛 500
                 log.info("用户 {} 重复收藏物品 {}，已忽略", userId, itemId);
+                syncFavoriteCount(itemId);
+                evictItemCache(itemId);
                 return true;
             }
-            itemMapper.update(null, new LambdaUpdateWrapper<Item>()
-                    .eq(Item::getId, itemId)
-                    .setSql("favorite_count = favorite_count + 1"));
             favorited = true;
         }
+        syncFavoriteCount(itemId);
+        evictItemCache(itemId);
+        log.info("用户 {} {} 收藏物品 {}", userId, favorited ? "添加" : "取消", itemId);
+        return favorited;
+    }
+
+    /**
+     * 收藏数按明细表重新校准：并发场景下自增/自减会漂移（删除 0 行也减一），
+     * 以 tb_favorite 的实际行数为准，保证页面上的收藏数永远与数据一致。
+     */
+    private void syncFavoriteCount(Long itemId) {
+        Long real = favoriteMapper.selectCount(new LambdaQueryWrapper<Favorite>()
+                .eq(Favorite::getItemId, itemId));
+        itemMapper.update(null, new LambdaUpdateWrapper<Item>()
+                .eq(Item::getId, itemId)
+                .set(Item::getFavoriteCount, real == null ? 0 : real.intValue()));
+    }
+
+    private void evictItemCache(Long itemId) {
         redisTemplate.delete(RedisKeys.itemDetail(itemId));
         // 首页热门卡片也带收藏数，一起失效
         redisTemplate.delete(RedisKeys.ITEM_HOT);
-        log.info("用户 {} {} 收藏物品 {}", userId, favorited ? "添加" : "取消", itemId);
-        return favorited;
     }
 
     /**

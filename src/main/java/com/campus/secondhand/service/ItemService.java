@@ -27,12 +27,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +52,12 @@ import java.util.stream.Collectors;
 public class ItemService {
 
     private static final int MAX_IMAGE = 5;
+
+    /** 原子「取值并清零」浏览量计数，兼容 Redis 5.x（GETDEL 需要 6.2+） */
+    private static final RedisScript<String> FLUSH_VIEWS_SCRIPT = new DefaultRedisScript<>(
+            "local v = redis.call('GET', KEYS[1]) "
+                    + "if v then redis.call('DEL', KEYS[1]) end "
+                    + "return v", String.class);
 
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
@@ -109,10 +118,12 @@ public class ItemService {
                     .eq(com.campus.secondhand.entity.Favorite::getItemId, id));
             item.setFavorited(favoriteCount != null && favoriteCount > 0);
         }
-        // 未上架的物品（待审核/已下架/已售出/驳回）只对卖家本人和管理员可见，
-        // 否则任何人遍历 id 就能看到未过审内容和管理员驳回理由。
+        // 待审核/已下架/驳回的物品只对卖家本人和管理员可见，否则任何人遍历 id
+        // 就能看到未过审内容和管理员驳回理由；「已售出」属于公开历史信息，允许任何人查看。
         boolean owner = currentUserId != null && currentUserId.equals(item.getSellerId());
-        if (!owner && !SecurityUtils.isAdmin() && !isStatus(item.getStatus(), Constants.ITEM_ON_SALE)) {
+        boolean publiclyVisible = isStatus(item.getStatus(), Constants.ITEM_ON_SALE)
+                || isStatus(item.getStatus(), Constants.ITEM_SOLD);
+        if (!owner && !SecurityUtils.isAdmin() && !publiclyVisible) {
             throw new BusinessException(404, "物品不存在或已下架");
         }
         increaseView(id);
@@ -131,10 +142,13 @@ public class ItemService {
 
     /**
      * 把 Redis 中的增量浏览量合并进数据库。
-     * 用 getAndDelete 保证「取值 + 清零」原子，避免并发下重复累加或丢增量。
+     * 用 Lua 脚本保证「取值 + 清零」原子，避免并发下重复累加或丢增量；
+     * 不用 getAndDelete（底层是 GETDEL，需要 Redis 6.2+，老版本会报 unknown command）。
      */
     public void flushViews(Long id) {
-        String value = stringRedisTemplate.opsForValue().getAndDelete(RedisKeys.itemViews(id));
+        Object raw = stringRedisTemplate.execute(FLUSH_VIEWS_SCRIPT,
+                Collections.singletonList(RedisKeys.itemViews(id)));
+        String value = raw == null ? null : raw.toString();
         long delta = 0L;
         try {
             if (value != null) {
