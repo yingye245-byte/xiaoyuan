@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.ModelAndView;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
@@ -28,10 +29,14 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(BusinessException.class)
-    public Object handleBusiness(BusinessException e, HttpServletRequest request) {
-        log.warn("业务异常 uri={} msg={}", request.getRequestURI(), e.getMessage());
+    public Object handleBusiness(BusinessException e, HttpServletRequest request, HttpServletResponse response) {
+        log.warn("业务异常 uri={} code={} msg={}", request.getRequestURI(), e.getCode(), e.getMessage());
         if (isAjax(request)) {
             return R.fail(e.getCode(), e.getMessage());
+        }
+        // 401/403/404 使用真实 HTTP 状态码，便于浏览器与监控识别；其余业务错误按 200 渲染提示页
+        if (e.getCode() == 401 || e.getCode() == 403 || e.getCode() == 404) {
+            response.setStatus(e.getCode());
         }
         ModelAndView mv = new ModelAndView("error/biz");
         mv.addObject("message", e.getMessage());
