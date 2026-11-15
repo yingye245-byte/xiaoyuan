@@ -19,6 +19,7 @@ CREATE DATABASE IF NOT EXISTS campus_secondhand
 USE campus_secondhand;
 
 DROP TABLE IF EXISTS tb_mail_log;
+DROP TABLE IF EXISTS tb_payment;
 DROP TABLE IF EXISTS tb_daily_stat;
 DROP TABLE IF EXISTS tb_message;
 DROP TABLE IF EXISTS tb_audit_record;

@@ -47,7 +47,11 @@ public class PaymentController {
             payment = paymentService.prepare(orderId, userId);
             order = orderService.detail(orderId, userId);
         } catch (BusinessException e) {
-            // 已支付 / 已取消 / 已超时的订单不必停在 500 错误页，直接回订单详情并提示原因
+            // 越权（403）/不存在（404）直接交给全局异常处理器返回真实状态码，
+            // 其余（已支付、已取消、已超时）回订单详情并提示原因，不必停在 500 错误页
+            if (e.getCode() == 403 || e.getCode() == 404) {
+                throw e;
+            }
             redirectAttributes.addFlashAttribute("error", e.getMessage());
             return "redirect:/order/" + orderId;
         }

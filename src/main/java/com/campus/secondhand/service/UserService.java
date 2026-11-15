@@ -21,6 +21,7 @@ import com.campus.secondhand.security.LoginUser;
 import com.campus.secondhand.utils.FileUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -77,7 +78,14 @@ public class UserService {
         user.setAvatar("/upload/demo/avatar-01.jpg");
         user.setStatus(1);
         user.setCreditScore(100);
-        userMapper.insert(user);
+        try {
+            // 上面的查重只解决「正常流程」，并发同名注册仍可能同时通过查重；
+            // 统一靠数据库唯一索引兜底，把 DuplicateKeyException 翻译成可读的业务提示，避免 500
+            userMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            log.warn("并发注册命中唯一索引：username={} email={}", dto.getUsername(), dto.getEmail());
+            throw new BusinessException("登录名或邮箱已被注册，请更换后重试");
+        }
 
         Role userRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
                 .eq(Role::getCode, Constants.ROLE_USER));
@@ -87,7 +95,11 @@ public class UserService {
         UserRole relation = new UserRole();
         relation.setUserId(user.getId());
         relation.setRoleId(userRole.getId());
-        userRoleMapper.insert(relation);
+        try {
+            userRoleMapper.insert(relation);
+        } catch (DuplicateKeyException e) {
+            log.warn("用户 {} 默认角色已存在，忽略重复写入", user.getId());
+        }
 
         Map<String, Object> params = new HashMap<>();
         params.put("nickname", user.getNickname());
