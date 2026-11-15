@@ -130,6 +130,7 @@ public class CategoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public void save(Category category) {
+        normalize(category);
         checkNameDuplicate(category);
         if (category.getStatus() == null) {
             category.setStatus(1);
@@ -146,6 +147,7 @@ public class CategoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public void update(Category category) {
+        normalize(category);
         Category exist = getById(category.getId());
         if (category.getId().equals(category.getParentId())) {
             throw new BusinessException("分类不能将自己设为父级");
@@ -211,6 +213,23 @@ public class CategoryService {
 
     public void evictCache() {
         redisTemplate.delete(RedisKeys.CATEGORY_ALL);
+    }
+
+    /**
+     * 名称去空格并做长度校验：空名会让前台分类导航出现空白胶囊，必须拦在入库前
+     */
+    private void normalize(Category category) {
+        String name = category.getName() == null ? "" : category.getName().trim();
+        if (name.isEmpty()) {
+            throw new BusinessException("分类名称不能为空");
+        }
+        if (name.length() > 20) {
+            throw new BusinessException("分类名称不能超过 20 个字");
+        }
+        category.setName(name);
+        if (category.getIcon() != null) {
+            category.setIcon(category.getIcon().trim());
+        }
     }
 
     private void checkNameDuplicate(Category category) {
